@@ -1,0 +1,15 @@
+{
+  "name": "sos-core-system-root",
+  "version": "1.0.0",
+  "description": "Sistema SOS Core - Workspace principal",
+  "scripts": {
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "start:server": "cd server && npm start",
+    "build:client": "cd client && npm run build"
+  },
+  "keywords": [],
+  "author": "Fellype",
+  "license": "ISC"
+}
