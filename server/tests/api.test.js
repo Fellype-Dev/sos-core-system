@@ -1,5 +1,5 @@
 const request = require('supertest');
-const app = require('../src/app');
+const app = require('../../src/app');
 
 describe('API Health Check', () => {
   it('should return status OK', async () => {
@@ -13,11 +13,12 @@ describe('API Health Check', () => {
   });
 });
 
-describe('User Routes', () => {
+describe('API Root', () => {
   it('should return api root metadata', async () => {
     const response = await request(app)
       .get('/api')
-      .expect('Content-Type', /json/);
+      .expect('Content-Type', /json/)
+      .expect(200);
 
     expect(response.body).toHaveProperty('message', 'API SOS Core System');
     expect(response.body).toHaveProperty('version', '1.0.0');

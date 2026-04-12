@@ -24,7 +24,7 @@ app.get('/health', (req, res) => {
 
 app.use('/api', routes);
 
-app.use('*', (req, res) => {
+app.use((req, res) => {
   res.status(404).json({ 
     error: 'Rota não encontrada',
     path: req.originalUrl

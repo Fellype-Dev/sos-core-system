@@ -1,23 +1,102 @@
-CREATE TABLE IF NOT EXISTS users (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+create extension if not exists pgcrypto;
+
+create table if not exists programs (
+    id uuid primary key default gen_random_uuid(),
+    code text unique not null,
+    name text not null,
+    age_range text,
+    location text,
+    created_at timestamptz not null default now()
 );
 
-CREATE INDEX idx_users_email ON users(email);
+create table if not exists users (
+    id uuid primary key default gen_random_uuid(),
+    full_name text not null,
+    email text unique not null,
+    password_hash text not null,
+    role text not null check (role in ('admin', 'sede', 'coordenador')),
+    is_active boolean not null default true,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
 
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
+create table if not exists user_programs (
+    user_id uuid not null references users(id) on delete cascade,
+    program_id uuid not null references programs(id) on delete cascade,
+    created_at timestamptz not null default now(),
+    primary key (user_id, program_id)
+);
 
-CREATE TRIGGER update_users_updated_at 
-    BEFORE UPDATE ON users
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+create table if not exists students (
+    id uuid primary key default gen_random_uuid(),
+    full_name text not null,
+    birth_date date,
+    enrollment_code text unique,
+    contact_phone text,
+    guardian_name text,
+    guardian_phone text,
+    allergies text,
+    medical_notes text,
+    program_id uuid not null references programs(id),
+    is_active boolean not null default true,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+create table if not exists student_notes (
+    id uuid primary key default gen_random_uuid(),
+    student_id uuid not null references students(id) on delete cascade,
+    author_user_id uuid not null references users(id),
+    note_text text not null,
+    created_at timestamptz not null default now()
+);
+
+create table if not exists attendance_sessions (
+    id uuid primary key default gen_random_uuid(),
+    program_id uuid not null references programs(id),
+    attendance_date date not null,
+    class_group text,
+    period text,
+    created_by uuid not null references users(id),
+    created_at timestamptz not null default now(),
+    unique(program_id, attendance_date, class_group, period)
+);
+
+create table if not exists attendance_records (
+    session_id uuid not null references attendance_sessions(id) on delete cascade,
+    student_id uuid not null references students(id) on delete cascade,
+    status text not null check (status in ('present', 'absent')),
+    note text,
+    created_at timestamptz not null default now(),
+    primary key (session_id, student_id)
+);
+
+create index if not exists idx_users_email on users(email);
+create index if not exists idx_students_program on students(program_id);
+create index if not exists idx_notes_student on student_notes(student_id);
+create index if not exists idx_attendance_program_date on attendance_sessions(program_id, attendance_date);
+
+create or replace function set_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists trg_users_updated_at on users;
+create trigger trg_users_updated_at
+before update on users
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_students_updated_at on students;
+create trigger trg_students_updated_at
+before update on students
+for each row execute function set_updated_at();
+
+insert into programs (code, name, age_range, location)
+values
+    ('SEMEAR', 'Programa Semear', 'Criancas', 'Unidade 1'),
+    ('VIVER', 'Programa Viver', 'Adolescentes', 'Unidade 2'),
+    ('SONHAR', 'Programa Sonhar', 'Idosos', 'Unidade 3')
+on conflict (code) do nothing;

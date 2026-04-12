@@ -24,25 +24,40 @@ cd ../client
 npm install
 ```
 
-### 3. Configurar o Banco de Dados
+### 3. Configurar o banco no Supabase
 
-**Criar banco de dados:**
-```bash
-psql -U postgres
-CREATE DATABASE sos_core_db;
-\q
+1. Crie um projeto em https://supabase.com
+2. Em **Project Settings > API**, copie:
+	- Project URL
+	- anon public key
+	- service_role key
+3. No **SQL Editor** do Supabase, execute todo o arquivo:
+```sql
+src/database/schema.sql
 ```
-
-**Executar script de criação das tabelas:**
-```bash
-psql -U postgres -d sos_core_db -f src/database/schema.sql
+4. Execute tambem o seed inicial:
+```sql
+src/database/seed.sql
 ```
 
 ### 4. Configurar variáveis de ambiente
 
-O arquivo `.env` já foi criado. Edite-o com suas configurações:
-```bash
-# Edite o arquivo .env na raiz do projeto
+Na raiz (`.env`):
+```env
+SUPABASE_URL=https://SEU-PROJETO.supabase.co
+SUPABASE_ANON_KEY=SUA_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY=SUA_SERVICE_ROLE_KEY
+JWT_SECRET=um_segredo_forte
+JWT_EXPIRES_IN=7d
+PORT=3000
+CORS_ORIGIN=http://localhost:5173
+```
+
+No frontend (`client/.env`):
+```env
+VITE_API_URL=http://localhost:3000/api
+VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
+VITE_SUPABASE_ANON_KEY=SUA_ANON_KEY
 ```
 
 ### 5. Iniciar os servidores
@@ -91,10 +106,10 @@ npm run dev:client
 
 ## Problemas Comuns
 
-### Erro de conexão com o banco
-- Verifique se o PostgreSQL está rodando
-- Confirme as credenciais no arquivo `.env`
-- Teste a conexão: `psql -U postgres -d sos_core_db`
+### Erro de conexão com o Supabase
+- Verifique `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY`
+- Confira se o schema SQL foi executado no projeto correto
+- Valide no painel do Supabase se as tabelas `programs`, `users` e `user_programs` existem
 
 ### Porta já em uso
 - Backend: Altere a variável `PORT` no arquivo `.env`
@@ -107,9 +122,9 @@ npm run dev:client
 ## Próximos Passos
 
 1. Leia a documentação completa no [README.md](README.md)
-2. Explore os endpoints da API em http://localhost:3000/api
-3. Teste a criação de usuários
-4. Implemente novas funcionalidades
+2. Faça login com um usuário admin criado no Supabase
+3. Cadastre usuários por perfil (`admin`, `sede`, `coordenador`)
+4. Avance para CRUD completo de alunos e persistência de chamada
 
 ## Precisa de ajuda?
 
