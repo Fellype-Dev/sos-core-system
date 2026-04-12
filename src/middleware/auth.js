@@ -39,6 +39,9 @@ const authMiddleware = (req, res, next) => {
 
       req.userId = decoded.id;
       req.userEmail = decoded.email;
+      req.userRole = decoded.role;
+      req.selectedProgramId = decoded.selectedProgramId || null;
+      req.allowedProgramIds = decoded.allowedProgramIds || [];
 
       return next();
     });

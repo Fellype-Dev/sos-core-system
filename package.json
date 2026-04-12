@@ -2,12 +2,31 @@
   "name": "sos-core-system-root",
   "version": "1.0.0",
   "description": "Sistema SOS Core - Workspace principal",
+  "main": "index.js",
   "scripts": {
     "install:all": "npm install && cd server && npm install && cd ../client && npm install",
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
     "start:server": "cd server && npm start",
-    "build:client": "cd client && npm run build"
+    "build:client": "cd client && npm run build",
+    "seed": "node src/database/seeders/initial-seed.js",
+    "test": "jest --coverage"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.8",
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.2",
+    "supertest": "^6.3.3"
   },
   "keywords": [],
   "author": "Fellype",

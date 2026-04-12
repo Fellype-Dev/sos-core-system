@@ -1,118 +1,148 @@
-const User = require('../models/User');
 const bcrypt = require('bcrypt');
+const User = require('../models/User');
+const { supabase } = require('../config/database');
 const JwtUtils = require('../utils/jwtUtils');
+const ApiResponse = require('../utils/ApiResponse');
 
 class AuthController {
   async register(req, res, next) {
     try {
-      const { name, email, password } = req.body;
+      const { full_name, email, password, role, program_ids = [] } = req.body;
 
-      if (!name || !email || !password) {
-        return res.status(400).json({
-          success: false,
-          message: 'Nome, email e senha são obrigatórios'
-        });
+      if (!full_name || !email || !password || !role) {
+        return ApiResponse.error(res, 'Campos obrigatorios: full_name, email, password, role', 400);
       }
 
-      const existingUser = await User.findByEmail(email);
-      if (existingUser) {
-        return res.status(400).json({
-          success: false,
-          message: 'Email já cadastrado'
-        });
+      const existing = await User.findByEmail(email);
+      if (existing) {
+        return ApiResponse.error(res, 'Ja existe usuario com este email', 400);
       }
 
-      const hashedPassword = await bcrypt.hash(password, 10);
-
-      const user = await User.create({
-        name,
+      const createdUser = await User.create({
+        full_name,
         email,
-        password: hashedPassword
+        password,
+        role,
+        program_ids,
       });
 
-      const token = JwtUtils.generateToken({
-        id: user.id,
-        email: user.email
-      });
-
-      res.status(201).json({
-        success: true,
-        message: 'Usuário registrado com sucesso',
-        data: {
-          user,
-          token
-        }
-      });
+      return ApiResponse.success(res, createdUser, 'Usuario cadastrado com sucesso', 201);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
   async login(req, res, next) {
     try {
-      const { email, password } = req.body;
+      const { email, password, selected_program_id } = req.body;
 
       if (!email || !password) {
-        return res.status(400).json({
-          success: false,
-          message: 'Email e senha são obrigatórios'
-        });
+        return ApiResponse.error(res, 'Informe email e senha', 400);
       }
 
-      const user = await User.findByEmail(email);
+      const user = await User.findByEmail(email, { includePassword: true });
       if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: 'Email ou senha inválidos'
-        });
+        return ApiResponse.error(res, 'Credenciais invalidas', 401);
       }
 
-      const isValidPassword = await bcrypt.compare(password, user.password);
+      if (!user.is_active) {
+        return ApiResponse.error(res, 'Usuario inativo', 403);
+      }
+
+      const isValidPassword = await bcrypt.compare(password, user.password_hash);
       if (!isValidPassword) {
-        return res.status(401).json({
-          success: false,
-          message: 'Email ou senha inválidos'
-        });
+        return ApiResponse.error(res, 'Credenciais invalidas', 401);
       }
 
-      const token = JwtUtils.generateToken({
-        id: user.id,
-        email: user.email
-      });
+      const assignedPrograms = (user.user_programs || []).map((relation) => relation.programs).filter(Boolean);
+      let allowedPrograms = assignedPrograms;
 
-      delete user.password;
+      if (user.role === 'admin') {
+        const { data: allPrograms, error: programsError } = await supabase
+          .from('programs')
+          .select('id, code, name, age_range, location')
+          .order('name', { ascending: true });
 
-      res.status(200).json({
-        success: true,
-        message: 'Login realizado com sucesso',
-        data: {
-          user,
-          token
+        if (programsError) {
+          throw programsError;
         }
-      });
+
+        allowedPrograms = allPrograms || [];
+      }
+
+      const allowedProgramIds = allowedPrograms.map((program) => program.id);
+
+      let activeProgramId = null;
+      if (user.role === 'coordenador') {
+        if (!selected_program_id) {
+          return ApiResponse.error(
+            res,
+            'Selecione uma unidade para entrar como coordenador',
+            400
+          );
+        }
+
+        if (!allowedProgramIds.includes(selected_program_id)) {
+          return ApiResponse.error(res, 'Unidade nao autorizada para este usuario', 403);
+        }
+
+        activeProgramId = selected_program_id;
+      } else if (selected_program_id) {
+        if (!allowedProgramIds.includes(selected_program_id)) {
+          return ApiResponse.error(res, 'Unidade nao autorizada para este usuario', 403);
+        }
+        activeProgramId = selected_program_id;
+      }
+
+      const tokenPayload = {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        selectedProgramId: activeProgramId,
+        allowedProgramIds,
+      };
+
+      const token = JwtUtils.generateToken(tokenPayload);
+
+      delete user.password_hash;
+
+      return ApiResponse.success(
+        res,
+        {
+          token,
+          user: {
+            id: user.id,
+            full_name: user.full_name,
+            email: user.email,
+            role: user.role,
+          },
+          selectedProgramId: activeProgramId,
+          availablePrograms: allowedPrograms,
+        },
+        'Login realizado com sucesso'
+      );
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
   async me(req, res, next) {
     try {
-      const userId = req.userId;
-
-      const user = await User.findById(userId);
+      const user = await User.findById(req.userId);
       if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: 'Usuário não encontrado'
-        });
+        return ApiResponse.notFound(res, 'Usuario nao encontrado');
       }
 
-      res.status(200).json({
-        success: true,
-        data: user
+      return ApiResponse.success(res, {
+        id: user.id,
+        full_name: user.full_name,
+        email: user.email,
+        role: user.role,
+        selectedProgramId: req.selectedProgramId || null,
+        availablePrograms: (user.user_programs || []).map((relation) => relation.programs).filter(Boolean),
       });
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 }

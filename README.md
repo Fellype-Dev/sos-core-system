@@ -1,22 +1,105 @@
-📢 VAGA DE EMPREGO - MAX ATACADISTA PARANÁ!
+# SOS Core System
 
-🚀 Venha fazer parte do nosso time! Estamos contratando para diversas áreas:
+Sistema web com frontend React e backend Node.js/Express integrado ao Supabase.
 
-🔍 Vagas Disponíveis:
+## Stack
 
-Operador de Caixa
-Repositor
-Atendente de Loja
-Fiscal de Prevenção e Perdas
-Auxiliar de Limpeza
-✅ O que oferecemos:
+### Frontend
+- React
+- Vite
+- Axios
+- React Router
 
-Ambiente dinâmico e colaborativo
-Oportunidade de crescimento profissional
-Salário compatível + benefícios
-Escala de trabalho: 6x1 (Trabalha 6 dias, folga 1)
-📍 Requisitos:
+### Backend
+- Node.js
+- Express.js
+- Supabase (PostgreSQL)
+- JWT para autenticacao
+- Bcrypt para hash de senhas
 
-Proatividade e boa comunicação
-Disponibilidade para finais de semana
-Não é necessária experiência!
+## Estrutura do Projeto
+
+```
+sos-core-system/
+|- client/                 # Frontend React
+|- src/                    # Backend
+|- tests/                  # Testes
+|- index.js                # Entrada da API
+|- package.json            # Scripts raiz
+```
+
+## Como Rodar
+
+### 1. Instalar dependencias
+
+Na raiz do projeto:
+
+```
+npm install
+```
+
+No frontend:
+
+```
+cd client
+npm install
+```
+
+### 2. Configurar ambiente
+
+Arquivo .env na raiz (backend):
+
+```
+NODE_ENV=development
+PORT=3000
+SUPABASE_URL=https://seu-projeto.supabase.co
+SUPABASE_ANON_KEY=sua_anon_key
+SUPABASE_SERVICE_ROLE_KEY=sua_service_role_key
+JWT_SECRET=seu_secret_aqui
+JWT_EXPIRES_IN=7d
+CORS_ORIGIN=http://localhost:5173
+CLIENT_URL=http://localhost:5173
+```
+
+Arquivo client/.env (frontend):
+
+```
+VITE_API_URL=http://localhost:3000/api
+```
+
+### 3. Rodar backend e frontend
+
+Na raiz:
+
+```
+npm run start:server
+```
+
+Em outro terminal:
+
+```
+npm run dev:client
+```
+
+### 4. Popular dados iniciais
+
+```
+npm run seed
+```
+
+## Credenciais iniciais
+
+- Admin: admin@sos.com / admin123
+- Coordenador Semear: semear@sos.com / coord123
+- Coordenador Viver: viver@sos.com / coord123
+- Coordenador Sonhar: sonhar@sos.com / coord123
+
+## Endpoints principais
+
+- GET /health
+- POST /api/auth/login
+- GET /api/programs
+- GET /api/users
+- POST /api/users
+- PUT /api/users/:id
+- DELETE /api/users/:id

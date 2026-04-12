@@ -1,123 +1,78 @@
 const User = require('../models/User');
-const bcrypt = require('bcrypt');
+const ApiResponse = require('../utils/ApiResponse');
 
 class UserController {
   async index(req, res, next) {
     try {
-      const users = await User.findAll();
-      res.status(200).json({
-        success: true,
-        data: users,
-        count: users.length
-      });
+      const users = await User.findAll({ programId: req.query.program_id });
+      return ApiResponse.success(res, users, 'Usuarios listados com sucesso');
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
   async show(req, res, next) {
     try {
-      const { id } = req.params;
-      const user = await User.findById(id);
-
+      const user = await User.findById(req.params.id);
       if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: 'Usuário não encontrado'
-        });
+        return ApiResponse.notFound(res, 'Usuario nao encontrado');
       }
 
-      res.status(200).json({
-        success: true,
-        data: user
-      });
+      return ApiResponse.success(res, user, 'Usuario encontrado');
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
   async store(req, res, next) {
     try {
-      const { name, email, password } = req.body;
+      const { full_name, email, password, role, program_ids = [] } = req.body;
 
-      if (!name || !email || !password) {
-        return res.status(400).json({
-          success: false,
-          message: 'Nome, email e senha são obrigatórios'
-        });
+      if (!full_name || !email || !password || !role) {
+        return ApiResponse.error(res, 'Campos obrigatorios: full_name, email, password, role', 400);
       }
 
-      const existingUser = await User.findByEmail(email);
-      if (existingUser) {
-        return res.status(400).json({
-          success: false,
-          message: 'Email já cadastrado'
-        });
-      }
-
-      const hashedPassword = await bcrypt.hash(password, 10);
-
-      const user = await User.create({
-        name,
+      const createdUser = await User.create({
+        full_name,
         email,
-        password: hashedPassword
+        password,
+        role,
+        program_ids,
       });
 
-      res.status(201).json({
-        success: true,
-        message: 'Usuário criado com sucesso',
-        data: user
-      });
+      return ApiResponse.success(res, createdUser, 'Usuario criado com sucesso', 201);
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
   async update(req, res, next) {
     try {
       const { id } = req.params;
-      const { name, email } = req.body;
-
-      const existingUser = await User.findById(id);
-      if (!existingUser) {
-        return res.status(404).json({
-          success: false,
-          message: 'Usuário não encontrado'
-        });
+      const current = await User.findById(id);
+      if (!current) {
+        return ApiResponse.notFound(res, 'Usuario nao encontrado');
       }
 
-      const updatedUser = await User.update(id, { name, email });
-
-      res.status(200).json({
-        success: true,
-        message: 'Usuário atualizado com sucesso',
-        data: updatedUser
-      });
+      const updatedUser = await User.update(id, req.body);
+      return ApiResponse.success(res, updatedUser, 'Usuario atualizado com sucesso');
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
   async destroy(req, res, next) {
     try {
       const { id } = req.params;
-
-      const existingUser = await User.findById(id);
-      if (!existingUser) {
-        return res.status(404).json({
-          success: false,
-          message: 'Usuário não encontrado'
-        });
+      const current = await User.findById(id);
+      if (!current) {
+        return ApiResponse.notFound(res, 'Usuario nao encontrado');
       }
 
       await User.delete(id);
-
-      res.status(200).json({
-        success: true,
-        message: 'Usuário deletado com sucesso'
-      });
+      return ApiResponse.success(res, null, 'Usuario removido com sucesso');
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 }

@@ -11,9 +11,16 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
+    const selectedProgramId = localStorage.getItem('selected_program_id');
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    if (selectedProgramId) {
+      config.headers['x-program-id'] = selectedProgramId;
+    }
+
     return config;
   },
   (error) => {
@@ -26,7 +33,9 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
