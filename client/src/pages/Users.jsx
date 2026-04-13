@@ -1,21 +1,25 @@
 import { useEffect, useState } from 'react';
 import useAuth from '../hooks/useAuth';
-import userService from '../services/userService';
+import studentService from '../services/studentService';
 import programService from '../services/programService';
 
 const initialForm = {
   full_name: '',
-  email: '',
-  password: '',
-  role: 'coordenador',
-  program_ids: [],
+  birth_date: '',
+  enrollment_code: '',
+  contact_phone: '',
+  guardian_name: '',
+  guardian_phone: '',
+  allergies: '',
+  medical_notes: '',
+  program_id: '',
 };
 
 function Users() {
-  const { user } = useAuth();
+  const { user, selectedProgramId } = useAuth();
   const isAdmin = user?.role === 'admin';
 
-  const [users, setUsers] = useState([]);
+  const [students, setStudents] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [editingId, setEditingId] = useState(null);
@@ -29,10 +33,10 @@ function Users() {
     setError('');
     try {
       const [usersResponse, programsResponse] = await Promise.all([
-        userService.getAll(),
+        studentService.getAll(),
         programService.getAll(),
       ]);
-      setUsers(usersResponse.data || []);
+      setStudents(usersResponse.data || []);
       setPrograms(programsResponse.data || []);
     } catch (err) {
       setError(err?.response?.data?.message || 'Falha ao carregar usuarios.');
@@ -42,8 +46,12 @@ function Users() {
   };
 
   useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      program_id: prev.program_id || selectedProgramId || '',
+    }));
     loadData();
-  }, []);
+  }, [selectedProgramId]);
 
   const resetForm = () => {
     setForm(initialForm);
@@ -58,9 +66,7 @@ function Users() {
   const toggleProgram = (programId) => {
     setForm((prev) => ({
       ...prev,
-      program_ids: prev.program_ids.includes(programId)
-        ? prev.program_ids.filter((id) => id !== programId)
-        : [...prev.program_ids, programId],
+      program_id: programId,
     }));
   };
 
@@ -73,27 +79,31 @@ function Users() {
     try {
       const payload = {
         full_name: form.full_name,
-        email: form.email,
-        role: form.role,
-        program_ids: form.program_ids,
+        birth_date: form.birth_date || null,
+        enrollment_code: form.enrollment_code || null,
+        contact_phone: form.contact_phone || null,
+        guardian_name: form.guardian_name || null,
+        guardian_phone: form.guardian_phone || null,
+        allergies: form.allergies || null,
+        medical_notes: form.medical_notes || null,
       };
 
-      if (form.password) {
-        payload.password = form.password;
+      if (isAdmin) {
+        payload.program_id = form.program_id || null;
       }
 
       if (editingId) {
-        await userService.update(editingId, payload);
-        setSuccess('Usuario atualizado com sucesso.');
+        await studentService.update(editingId, payload);
+        setSuccess('Aluno atualizado com sucesso.');
       } else {
-        await userService.create(payload);
-        setSuccess('Usuario criado com sucesso.');
+        await studentService.create(payload);
+        setSuccess('Aluno criado com sucesso.');
       }
 
       resetForm();
       await loadData();
     } catch (err) {
-      setError(err?.response?.data?.message || 'Falha ao salvar usuario.');
+      setError(err?.response?.data?.message || 'Falha ao salvar aluno.');
     } finally {
       setSubmitting(false);
     }
@@ -103,10 +113,14 @@ function Users() {
     setEditingId(item.id);
     setForm({
       full_name: item.full_name || '',
-      email: item.email || '',
-      password: '',
-      role: item.role || 'coordenador',
-      program_ids: (item.user_programs || []).map((relation) => relation.program_id),
+      birth_date: item.birth_date || '',
+      enrollment_code: item.enrollment_code || '',
+      contact_phone: item.contact_phone || '',
+      guardian_name: item.guardian_name || '',
+      guardian_phone: item.guardian_phone || '',
+      allergies: item.allergies || '',
+      medical_notes: item.medical_notes || '',
+      program_id: item.program_id || selectedProgramId || '',
     });
   };
 
@@ -114,29 +128,20 @@ function Users() {
     setError('');
     setSuccess('');
     try {
-      await userService.delete(id);
+      await studentService.delete(id);
       if (editingId === id) {
         resetForm();
       }
-      setSuccess('Usuario removido com sucesso.');
+      setSuccess('Aluno removido com sucesso.');
       await loadData();
     } catch (err) {
-      setError(err?.response?.data?.message || 'Falha ao remover usuario.');
+      setError(err?.response?.data?.message || 'Falha ao remover aluno.');
     }
   };
 
-  if (!isAdmin) {
-    return (
-      <section className="panel">
-        <h1>Usuarios</h1>
-        <p>Apenas admin pode gerenciar usuarios.</p>
-      </section>
-    );
-  }
-
   return (
     <section className="panel">
-      <h1>Gestao de Usuarios</h1>
+      <h1>Cadastro de Alunos</h1>
 
       {error && <p style={{ color: '#b42318' }}>{error}</p>}
       {success && <p style={{ color: '#027a48' }}>{success}</p>}
@@ -152,48 +157,82 @@ function Users() {
         />
 
         <input
-          type="email"
-          name="email"
-          placeholder="Email"
-          value={form.email}
+          type="date"
+          name="birth_date"
+          value={form.birth_date}
           onChange={onChange}
-          required
         />
 
         <input
-          type="password"
-          name="password"
-          placeholder={editingId ? 'Nova senha (opcional)' : 'Senha'}
-          value={form.password}
+          type="text"
+          name="enrollment_code"
+          placeholder="Matricula"
+          value={form.enrollment_code}
           onChange={onChange}
-          required={!editingId}
         />
 
-        <select name="role" value={form.role} onChange={onChange}>
-          <option value="admin">Admin</option>
-          <option value="sede">Sede</option>
-          <option value="coordenador">Coordenador</option>
-        </select>
+        <input
+          type="text"
+          name="contact_phone"
+          placeholder="Telefone de contato"
+          value={form.contact_phone}
+          onChange={onChange}
+        />
 
-        <div>
-          <strong>Programas</strong>
+        <input
+          type="text"
+          name="guardian_name"
+          placeholder="Nome do responsavel"
+          value={form.guardian_name}
+          onChange={onChange}
+        />
+
+        <input
+          type="text"
+          name="guardian_phone"
+          placeholder="Telefone do responsavel"
+          value={form.guardian_phone}
+          onChange={onChange}
+        />
+
+        <input
+          type="text"
+          name="allergies"
+          placeholder="Alergias"
+          value={form.allergies}
+          onChange={onChange}
+        />
+
+        <textarea
+          name="medical_notes"
+          placeholder="Observacoes medicas"
+          value={form.medical_notes}
+          onChange={onChange}
+          rows={3}
+        />
+
+        {isAdmin && (
+          <div>
+            <strong>Programa</strong>
           <div style={{ display: 'grid', gap: '0.35rem', marginTop: '0.5rem' }}>
             {programs.map((program) => (
               <label key={program.id}>
                 <input
-                  type="checkbox"
-                  checked={form.program_ids.includes(program.id)}
+                  type="radio"
+                  name="program_id"
+                  checked={form.program_id === program.id}
                   onChange={() => toggleProgram(program.id)}
                 />{' '}
                 {program.name}
               </label>
             ))}
           </div>
-        </div>
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button type="submit" disabled={submitting}>
-            {submitting ? 'Salvando...' : editingId ? 'Atualizar' : 'Criar'}
+            {submitting ? 'Salvando...' : editingId ? 'Atualizar aluno' : 'Cadastrar aluno'}
           </button>
           {editingId && (
             <button type="button" onClick={resetForm}>
@@ -203,33 +242,30 @@ function Users() {
         </div>
       </form>
 
-      <h2>Usuarios cadastrados</h2>
+      <h2>Alunos cadastrados</h2>
 
       {loading ? (
         <p>Carregando...</p>
-      ) : users.length === 0 ? (
-        <p>Nenhum usuario encontrado.</p>
+      ) : students.length === 0 ? (
+        <p>Nenhum aluno encontrado.</p>
       ) : (
         <table className="attendance-table">
           <thead>
             <tr>
               <th>Nome</th>
-              <th>Email</th>
-              <th>Papel</th>
-              <th>Programas</th>
+              <th>Matricula</th>
+              <th>Programa</th>
+              <th>Contato</th>
               <th>Acoes</th>
             </tr>
           </thead>
           <tbody>
-            {users.map((item) => (
+            {students.map((item) => (
               <tr key={item.id}>
                 <td>{item.full_name}</td>
-                <td>{item.email}</td>
-                <td>{item.role}</td>
-                <td>
-                  {(item.user_programs || []).map((relation) => relation.programs?.name).filter(Boolean).join(', ') ||
-                    '-'}
-                </td>
+                <td>{item.enrollment_code || '-'}</td>
+                <td>{item.programs?.name || '-'}</td>
+                <td>{item.contact_phone || '-'}</td>
                 <td>
                   <button type="button" onClick={() => startEdit(item)}>
                     Editar
