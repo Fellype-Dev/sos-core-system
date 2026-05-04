@@ -77,7 +77,6 @@ class StudentController {
         guardian_phone,
         allergies,
         medical_notes,
-        class_group,
       } = req.body;
 
       if (!full_name) {
@@ -94,16 +93,6 @@ class StudentController {
         return ApiResponse.error(res, 'Unidade invalida ou nao informada', 400);
       }
 
-      const turma = normalizeClassGroup(class_group);
-      const turmaRow = await ClassGroup.findByProgramAndSlug(programId, turma);
-      if (!turmaRow) {
-        return ApiResponse.error(
-          res,
-          'Turma nao cadastrada nesta unidade. Cadastre a turma antes de vincular o aluno.',
-          400
-        );
-      }
-
       const created = await Student.create({
         full_name,
         birth_date: birth_date || null,
@@ -114,7 +103,7 @@ class StudentController {
         allergies: allergies || null,
         medical_notes: medical_notes || null,
         program_id: programId,
-        class_group: turma,
+        // class_group omitted: will use DB default or be assigned later via ClassGroup management
         is_active: true,
       });
 
@@ -164,20 +153,16 @@ class StudentController {
         updates.program_id = req.body.program_id;
       }
 
-      const nextProgramId = updates.program_id !== undefined ? updates.program_id : current.program_id;
-      const nextSlug = normalizeClassGroup(
-        updates.class_group !== undefined ? updates.class_group : current.class_group
-      );
-      const turmaRow = await ClassGroup.findByProgramAndSlug(nextProgramId, nextSlug);
-      if (!turmaRow) {
-        return ApiResponse.error(
-          res,
-          'Turma invalida para a unidade do aluno. Cadastre a turma na unidade ou ajuste a turma/unidade.',
-          400
-        );
-      }
-      if (updates.class_group !== undefined || updates.program_id !== undefined) {
-        updates.class_group = nextSlug;
+      if (updates.class_group !== undefined && updates.class_group !== null) {
+        const nextProgramId = updates.program_id !== undefined ? updates.program_id : current.program_id;
+        const turmaRow = await ClassGroup.findByProgramAndSlug(nextProgramId, updates.class_group);
+        if (!turmaRow) {
+          return ApiResponse.error(
+            res,
+            'Turma invalida para a unidade do aluno. Cadastre a turma na unidade ou ajuste a turma/unidade.',
+            400
+          );
+        }
       }
 
       const updated = await Student.update(id, updates);

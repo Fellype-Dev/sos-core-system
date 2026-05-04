@@ -48,6 +48,31 @@
   border-bottom-color: var(--brand);
 }
 
+.students-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+
+.students-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  width: min(720px, 95%);
+  max-height: 80vh;
+  overflow: auto;
+  box-shadow: var(--shadow-md);
+}
+
+.students-modal h3 { margin-top: 0; }
+.students-modal .detail-row { display:flex; gap:0.75rem; margin-bottom:0.5rem; }
+.students-modal .detail-row .label { width: 10rem; color: var(--text-muted); font-weight:600 }
+
 .students-layout {
   display: grid;
   gap: 1.25rem;
@@ -455,3 +480,132 @@
   font-size: 0.9rem;
   padding: 1rem 0;
 }
+
+/* CSS variables fallbacks for Students Turmas Assignment UI */
+:root {
+  --bg-secondary: color-mix(in srgb, var(--brand) 2%, var(--surface));
+  --bg-tertiary: var(--surface-muted);
+  --primary: var(--brand);
+  --primary-light: color-mix(in srgb, var(--brand) 12%, var(--surface));
+/* CSS variables fallbacks for Students Turmas Assignment UI */
+:root {
+  --bg-secondary: color-mix(in srgb, var(--brand) 2%, var(--surface));
+  --bg-tertiary: var(--surface-muted);
+  --primary: var(--brand);
+  --primary-light: color-mix(in srgb, var(--brand) 12%, var(--surface));
+}
+
+/* Assignment Table Styles */
+.students-assignment-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.students-assignment-table thead {
+  background: var(--surface-muted);
+}
+
+.students-assignment-table th {
+  padding: 0.75rem;
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.students-assignment-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.students-assignment-table tbody tr:hover {
+  background: color-mix(in srgb, var(--brand) 3%, var(--surface));
+}
+
+.students-assignment-table tbody tr:last-child td {
+  border-bottom: 1px solid var(--border);
+}
+
+.students-assignment-table__name {
+  font-weight: 500;
+  color: var(--text);
+  min-width: 180px;
+}
+
+.students-assignment-table__enrollment {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-family: monospace;
+  min-width: 120px;
+}
+
+.students-assignment-table__turma {
+  min-width: 200px;
+}
+
+.students-assignment-table__select {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.students-assignment-table__select:hover {
+  border-color: var(--brand);
+}
+
+.students-assignment-table__select:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--primary-light);
+}
+
+.students-assignment-table__actions {
+  display: flex;
+  gap: 0.5rem;
+  min-width: 80px;
+}
+
+.students-assignment-table__btn-edit,
+.students-assignment-table__btn-delete {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.students-assignment-table__btn-edit:hover {
+  background: var(--surface-muted);
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.students-assignment-table__btn-delete:hover {
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  border-color: var(--danger);
+  color: var(--danger);
+}
+}
+
