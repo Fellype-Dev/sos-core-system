@@ -40,8 +40,15 @@ const authMiddleware = (req, res, next) => {
       req.userId = decoded.id;
       req.userEmail = decoded.email;
       req.userRole = decoded.role;
-      req.selectedProgramId = decoded.selectedProgramId || null;
-      req.allowedProgramIds = decoded.allowedProgramIds || [];
+
+      const rawSel = decoded.selectedProgramId;
+      req.selectedProgramId =
+        rawSel === undefined || rawSel === null || rawSel === ''
+          ? null
+          : String(rawSel).trim() || null;
+
+      const rawAllowed = decoded.allowedProgramIds;
+      req.allowedProgramIds = Array.isArray(rawAllowed) ? rawAllowed.map((id) => String(id)) : [];
 
       return next();
     });
