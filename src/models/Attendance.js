@@ -1,6 +1,20 @@
 const { supabase } = require('../config/database');
 
 class Attendance {
+  static async findSessionById(sessionId) {
+    const { data, error } = await supabase
+      .from('attendance_sessions')
+      .select('id, program_id, attendance_date, class_group, period, created_by, created_at')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    return data || null;
+  }
+
   static async findSession({ programId, attendanceDate, classGroup, period }) {
     const { data, error } = await supabase
       .from('attendance_sessions')
@@ -85,6 +99,71 @@ class Attendance {
       .from('attendance_records')
       .select('session_id, student_id, status, note, created_at')
       .eq('session_id', sessionId);
+
+    if (error) {
+      throw error;
+    }
+
+    return data || [];
+  }
+
+  static async getSessionDetail(sessionId) {
+    const session = await this.findSessionById(sessionId);
+    if (!session) {
+      return null;
+    }
+
+    const records = await this.listRecords(sessionId);
+    const studentIds = [...new Set(records.map((record) => record.student_id).filter(Boolean))];
+
+    let studentsById = new Map();
+    if (studentIds.length > 0) {
+      const { data: students, error } = await supabase
+        .from('students')
+        .select('id, full_name, enrollment_code, class_group')
+        .in('id', studentIds);
+
+      if (error) {
+        throw error;
+      }
+
+      studentsById = new Map((students || []).map((student) => [student.id, student]));
+    }
+
+    const mergedRecords = records.map((record) => ({
+      ...record,
+      student: studentsById.get(record.student_id) || null,
+    }));
+
+    return { session, records: mergedRecords };
+  }
+
+  static async listSessions({ programId, attendanceDate, classGroup, period } = {}) {
+    let query = supabase
+      .from('attendance_sessions')
+      .select('id, program_id, attendance_date, class_group, period, created_by, created_at')
+      .order('attendance_date', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (programId) {
+      query = query.eq('program_id', programId);
+    }
+
+    if (attendanceDate) {
+      query = query.eq('attendance_date', attendanceDate);
+    }
+
+    if (classGroup !== undefined && classGroup !== null && classGroup !== '') {
+      query = query.eq('class_group', classGroup);
+    } else if (classGroup === '') {
+      query = query.eq('class_group', '');
+    }
+
+    if (period !== undefined) {
+      query = query.eq('period', period || '');
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw error;

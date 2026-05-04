@@ -126,6 +126,56 @@ class AttendanceController {
       return next(error);
     }
   }
+
+  async listSessions(req, res, next) {
+    try {
+      const { attendance_date, class_group, period } = req.query;
+
+      const programId = this.resolveProgramId(req);
+      const access = this.validateProgramAccess(req, programId);
+      if (!access.ok) {
+        return ApiResponse.error(res, access.message, 403);
+      }
+
+      if (programId && !isUuid(programId)) {
+        return ApiResponse.error(res, 'Identificador de unidade invalido', 400);
+      }
+
+      const sessions = await Attendance.listSessions({
+        programId,
+        attendanceDate: attendance_date,
+        classGroup: class_group,
+        period,
+      });
+
+      return ApiResponse.success(res, { data: sessions }, 'Sessoes de chamada listadas com sucesso');
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async sessionDetail(req, res, next) {
+    try {
+      const { id } = req.params;
+      if (!id) {
+        return ApiResponse.error(res, 'Parametro obrigatorio: id', 400);
+      }
+
+      const detail = await Attendance.getSessionDetail(id);
+      if (!detail) {
+        return ApiResponse.notFound(res, 'Sessao de chamada nao encontrada');
+      }
+
+      const access = this.validateProgramAccess(req, detail.session.program_id);
+      if (!access.ok) {
+        return ApiResponse.error(res, access.message, 403);
+      }
+
+      return ApiResponse.success(res, detail, 'Detalhe da chamada carregado com sucesso');
+    } catch (error) {
+      return next(error);
+    }
+  }
 }
 
 module.exports = new AttendanceController();

@@ -1,5 +1,5 @@
 -- Turma do aluno (mesmo conceito de class_group na chamada).
-alter table students add column if not exists class_group text not null default 'A';
+alter table students add column if not exists class_group text;
 
 create index if not exists idx_students_program_class on students (program_id, class_group);
 
