@@ -37,14 +37,20 @@ export function AuthProvider({ children }) {
     if (!authToken) return;
 
     setToken(authToken);
-    setUser(payload.user || null);
-    setSelectedProgramId(payload.selectedProgramId || null);
-    setAvailablePrograms(payload.availablePrograms || []);
+    setUser((prev) => ('user' in payload ? payload.user ?? null : prev));
+    if ('selectedProgramId' in payload) {
+      setSelectedProgramId(payload.selectedProgramId || null);
+      localStorage.setItem('selected_program_id', payload.selectedProgramId || '');
+    }
+    if ('availablePrograms' in payload) {
+      setAvailablePrograms(payload.availablePrograms || []);
+      localStorage.setItem('available_programs', JSON.stringify(payload.availablePrograms || []));
+    }
 
     localStorage.setItem('token', authToken);
-    localStorage.setItem('sos_user', JSON.stringify(payload.user || null));
-    localStorage.setItem('selected_program_id', payload.selectedProgramId || '');
-    localStorage.setItem('available_programs', JSON.stringify(payload.availablePrograms || []));
+    if ('user' in payload) {
+      localStorage.setItem('sos_user', JSON.stringify(payload.user ?? null));
+    }
   };
 
   const logout = () => {

@@ -1,13 +1,12 @@
 const Student = require('../models/Student');
+const ClassGroup = require('../models/ClassGroup');
 const ApiResponse = require('../utils/ApiResponse');
+const { resolveScopedProgramId, isUuid } = require('../utils/programContext');
+const { normalizeClassGroup, parseClassGroupFilter } = require('../utils/classGroup');
 
 class StudentController {
   resolveProgramId(req) {
-    if (req.userRole === 'admin') {
-      return req.query.program_id || req.body.program_id || req.selectedProgramId || null;
-    }
-
-    return req.selectedProgramId || null;
+    return resolveScopedProgramId(req);
   }
 
   validateProgramAccess(req, targetProgramId) {
@@ -19,7 +18,9 @@ class StudentController {
       return { ok: true };
     }
 
-    if (!req.allowedProgramIds.includes(targetProgramId)) {
+    const allowed = Array.isArray(req.allowedProgramIds) ? req.allowedProgramIds : [];
+    const ok = allowed.some((id) => String(id) === String(targetProgramId));
+    if (!ok) {
       return { ok: false, message: 'Unidade nao autorizada para este usuario' };
     }
 
@@ -34,7 +35,13 @@ class StudentController {
         return ApiResponse.error(res, access.message, 403);
       }
 
-      const students = await Student.findAll({ programId });
+      if (programId && !isUuid(programId)) {
+        return ApiResponse.error(res, 'Identificador de unidade invalido', 400);
+      }
+
+      const classGroupFilter = parseClassGroupFilter(req.query.class_group);
+
+      const students = await Student.findAll({ programId, classGroup: classGroupFilter });
       return ApiResponse.success(res, students, 'Alunos listados com sucesso');
     } catch (error) {
       return next(error);
@@ -70,6 +77,7 @@ class StudentController {
         guardian_phone,
         allergies,
         medical_notes,
+        class_group,
       } = req.body;
 
       if (!full_name) {
@@ -82,6 +90,20 @@ class StudentController {
         return ApiResponse.error(res, access.message, 403);
       }
 
+      if (!programId || !isUuid(programId)) {
+        return ApiResponse.error(res, 'Unidade invalida ou nao informada', 400);
+      }
+
+      const turma = normalizeClassGroup(class_group);
+      const turmaRow = await ClassGroup.findByProgramAndSlug(programId, turma);
+      if (!turmaRow) {
+        return ApiResponse.error(
+          res,
+          'Turma nao cadastrada nesta unidade. Cadastre a turma antes de vincular o aluno.',
+          400
+        );
+      }
+
       const created = await Student.create({
         full_name,
         birth_date: birth_date || null,
@@ -92,6 +114,7 @@ class StudentController {
         allergies: allergies || null,
         medical_notes: medical_notes || null,
         program_id: programId,
+        class_group: turma,
         is_active: true,
       });
 
@@ -133,8 +156,28 @@ class StudentController {
         }
       });
 
+      if (req.body.class_group !== undefined) {
+        updates.class_group = normalizeClassGroup(req.body.class_group);
+      }
+
       if (req.userRole === 'admin' && req.body.program_id) {
         updates.program_id = req.body.program_id;
+      }
+
+      const nextProgramId = updates.program_id !== undefined ? updates.program_id : current.program_id;
+      const nextSlug = normalizeClassGroup(
+        updates.class_group !== undefined ? updates.class_group : current.class_group
+      );
+      const turmaRow = await ClassGroup.findByProgramAndSlug(nextProgramId, nextSlug);
+      if (!turmaRow) {
+        return ApiResponse.error(
+          res,
+          'Turma invalida para a unidade do aluno. Cadastre a turma na unidade ou ajuste a turma/unidade.',
+          400
+        );
+      }
+      if (updates.class_group !== undefined || updates.program_id !== undefined) {
+        updates.class_group = nextSlug;
       }
 
       const updated = await Student.update(id, updates);

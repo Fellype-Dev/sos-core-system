@@ -1,13 +1,10 @@
 const Attendance = require('../models/Attendance');
 const ApiResponse = require('../utils/ApiResponse');
+const { resolveScopedProgramId, isUuid } = require('../utils/programContext');
 
 class AttendanceController {
   resolveProgramId(req) {
-    if (req.userRole === 'admin') {
-      return req.query.program_id || req.body.program_id || req.selectedProgramId || null;
-    }
-
-    return req.selectedProgramId || null;
+    return resolveScopedProgramId(req);
   }
 
   validateProgramAccess(req, targetProgramId) {
@@ -19,7 +16,9 @@ class AttendanceController {
       return { ok: true };
     }
 
-    if (!req.allowedProgramIds.includes(targetProgramId)) {
+    const allowed = Array.isArray(req.allowedProgramIds) ? req.allowedProgramIds : [];
+    const ok = allowed.some((id) => String(id) === String(targetProgramId));
+    if (!ok) {
       return { ok: false, message: 'Unidade nao autorizada para este usuario' };
     }
 
@@ -37,6 +36,10 @@ class AttendanceController {
       const access = this.validateProgramAccess(req, programId);
       if (!access.ok) {
         return ApiResponse.error(res, access.message, 403);
+      }
+
+      if (programId && !isUuid(programId)) {
+        return ApiResponse.error(res, 'Identificador de unidade invalido', 400);
       }
 
       const session = await Attendance.findSession({
@@ -92,6 +95,10 @@ class AttendanceController {
       const access = this.validateProgramAccess(req, programId);
       if (!access.ok) {
         return ApiResponse.error(res, access.message, 403);
+      }
+
+      if (programId && !isUuid(programId)) {
+        return ApiResponse.error(res, 'Identificador de unidade invalido', 400);
       }
 
       const session = await Attendance.getOrCreateSession({

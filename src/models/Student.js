@@ -1,14 +1,18 @@
 const { supabase } = require('../config/database');
 
 const BASE_STUDENT_SELECT =
-  'id, full_name, birth_date, enrollment_code, contact_phone, guardian_name, guardian_phone, allergies, medical_notes, is_active, created_at, updated_at, program_id, programs(id, code, name, location)';
+  'id, full_name, birth_date, enrollment_code, contact_phone, guardian_name, guardian_phone, allergies, medical_notes, is_active, created_at, updated_at, program_id, class_group, programs(id, code, name, location)';
 
 class Student {
-  static async findAll({ programId } = {}) {
+  static async findAll({ programId, classGroup } = {}) {
     let query = supabase.from('students').select(BASE_STUDENT_SELECT).order('full_name', { ascending: true });
 
     if (programId) {
       query = query.eq('program_id', programId);
+    }
+
+    if (classGroup) {
+      query = query.eq('class_group', classGroup);
     }
 
     const { data, error } = await query;

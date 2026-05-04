@@ -2,10 +2,19 @@ import { useEffect, useMemo, useState } from 'react';
 import useAuth from '../hooks/useAuth';
 import studentService from '../services/studentService';
 import attendanceService from '../services/attendanceService';
+import classGroupService from '../services/classGroupService';
+
+function isUuid(value) {
+  return (
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+  );
+}
 
 function Attendance() {
   const { selectedProgramId } = useAuth();
   const [records, setRecords] = useState([]);
+  const [turmaOptions, setTurmaOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -19,6 +28,34 @@ function Attendance() {
     () => new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
     []
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadTurmas = async () => {
+      if (!selectedProgramId || !isUuid(selectedProgramId)) {
+        setTurmaOptions([]);
+        return;
+      }
+      try {
+        const res = await classGroupService.list(selectedProgramId);
+        if (cancelled) return;
+        const opts = res.data || [];
+        setTurmaOptions(opts);
+        setClassGroup((prev) => {
+          if (opts.some((o) => o.slug === prev)) return prev;
+          return opts[0]?.slug || 'A';
+        });
+      } catch {
+        if (!cancelled) setTurmaOptions([]);
+      }
+    };
+
+    loadTurmas();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProgramId]);
 
   const markStatus = (studentId, status) => {
     setRecords((prev) =>
@@ -45,7 +82,7 @@ function Attendance() {
       setSuccess('');
       try {
         const [studentsResponse, attendanceResponse] = await Promise.all([
-          studentService.getAll({ program_id: selectedProgramId }),
+          studentService.getAll({ program_id: selectedProgramId, class_group: classGroup }),
           attendanceService.getByDate({
             attendance_date: attendanceDate,
             class_group: classGroup,
@@ -117,14 +154,23 @@ function Attendance() {
 
       {error && <p style={{ color: '#b42318' }}>{error}</p>}
       {success && <p style={{ color: '#027a48' }}>{success}</p>}
-      {!selectedProgramId && <p>Selecione uma unidade no login para carregar os alunos da chamada.</p>}
+      {!selectedProgramId && (
+        <p className="form-error">Nenhuma unidade ativa. Escolha uma unidade no menu superior ou entre em contato com a sede.</p>
+      )}
 
       <div className="attendance-toolbar">
         <label>
           Turma
           <select value={classGroup} onChange={(event) => setClassGroup(event.target.value)}>
-            <option value="A">Turma A</option>
-            <option value="B">Turma B</option>
+            {turmaOptions.length === 0 ? (
+              <option value={classGroup}>Carregando turmas…</option>
+            ) : (
+              turmaOptions.map((t) => (
+                <option key={t.id} value={t.slug}>
+                  {t.name}
+                </option>
+              ))
+            )}
           </select>
         </label>
 
@@ -141,31 +187,27 @@ function Attendance() {
         </button>
       </div>
 
-      <table className="attendance-table">
+      <table className="attendance-table attendance-marking">
         <thead>
           <tr>
-            <th>Foto</th>
-            <th>Nome do aluno</th>
-            <th>Presenca</th>
+            <th>Aluno</th>
+            <th>Presente</th>
             <th>Falta</th>
           </tr>
         </thead>
         <tbody>
           {!loading && records.length === 0 && (
             <tr>
-              <td colSpan="4">Nenhum aluno carregado para esta turma.</td>
+              <td colSpan="3">Nenhum aluno carregado para esta turma.</td>
             </tr>
           )}
           {loading && (
             <tr>
-              <td colSpan="4">Carregando alunos...</td>
+              <td colSpan="3">Carregando alunos…</td>
             </tr>
           )}
           {records.map((record) => (
             <tr key={record.id}>
-              <td>
-                <span className="avatar-placeholder">{record.id}</span>
-              </td>
               <td>{record.name}</td>
               <td>
                 <input

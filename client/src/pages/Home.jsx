@@ -6,16 +6,19 @@ function Home() {
 
   return (
     <section className="panel">
-      <h1>Painel Inicial</h1>
+      <h1>Painel inicial</h1>
       <p>
-        Bem-vindo(a), <strong>{user?.full_name || 'Coordenador(a)'}</strong>.
+        Bem-vindo(a), <strong>{user?.full_name || 'Usuário(a)'}</strong>.
       </p>
       <p>
-        Unidade ativa: <strong>{currentProgram?.name || 'Sede'}</strong>
+        Unidade ativa: <strong>{currentProgram?.name || '—'}</strong>
+        {user?.role === 'admin' && availablePrograms?.length > 1 && (
+          <span> — use o seletor no topo para alternar entre unidades.</span>
+        )}
       </p>
       <p>
-        O sistema SIGU centraliza cadastro, prontuario digital, chamada diaria e relatorios de frequencia
-        para os programas sociais do SOS.
+        O SIGU (Sistema Integrado de Gerenciamento de Unidades SOS) reúne cadastro de participantes,
+        chamada e relatórios de frequência das unidades do Serviço de Obras Sociais.
       </p>
     </section>
   );
