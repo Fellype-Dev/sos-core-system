@@ -50,7 +50,7 @@ create table if not exists students (
     allergies text,
     medical_notes text,
     program_id uuid not null references programs(id),
-    class_group text not null default 'A',
+    class_group text,
     is_active boolean not null default true,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()

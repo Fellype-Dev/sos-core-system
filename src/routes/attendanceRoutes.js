@@ -7,6 +7,8 @@ const authorizeRoles = require('../middleware/authorize');
 router.use(authMiddleware);
 router.use(authorizeRoles('admin', 'sede', 'coordenador'));
 
+router.get('/sessions', (req, res, next) => AttendanceController.listSessions(req, res, next));
+router.get('/sessions/:id', (req, res, next) => AttendanceController.sessionDetail(req, res, next));
 router.get('/', (req, res, next) => AttendanceController.show(req, res, next));
 router.post('/', (req, res, next) => AttendanceController.store(req, res, next));
 

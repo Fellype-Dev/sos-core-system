@@ -23,7 +23,7 @@ const initialForm = () => ({
   allergies: '',
   medical_notes: '',
   program_id: '',
-  class_group: 'A',
+  // class_group removed: assignment happens in 'Gerenciar turmas'
 });
 
 function formatDateBR(iso) {
@@ -34,14 +34,14 @@ function formatDateBR(iso) {
 }
 
 function turmaLabel(groups, slug) {
-  if (!slug) return '—';
+  if (!slug) return 'Sem Turma';
   const row = groups.find((g) => g.slug === slug);
   return row ? row.name : slug;
 }
 
 function Users() {
   const { user, selectedProgramId } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const canChooseProgram = user?.role === 'admin';
 
   const [students, setStudents] = useState([]);
   const [programs, setPrograms] = useState([]);
@@ -57,12 +57,23 @@ function Users() {
   const [classGroupsList, setClassGroupsList] = useState([]);
   const [classGroupsForm, setClassGroupsForm] = useState([]);
   const [newTurmaName, setNewTurmaName] = useState('');
+  const [newTurmaPeriod, setNewTurmaPeriod] = useState('manha');
   const [turmaBusy, setTurmaBusy] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [assignmentSearchQuery, setAssignmentSearchQuery] = useState('');
+  const [assignmentClassFilter, setAssignmentClassFilter] = useState(TURMA_FILTER_ALL);
+  const [selectedStudentForDetails, setSelectedStudentForDetails] = useState(null);
+
+  const selectedProgramName = useMemo(() => {
+    const program = programs.find((item) => String(item.id) === String(selectedProgramId));
+    if (!program) return selectedProgramId || 'Unidade selecionada';
+    return program.location ? `${program.name} · ${program.location}` : program.name;
+  }, [programs, selectedProgramId]);
 
   const programIdForFormTurmas = useMemo(() => {
-    if (isAdmin) return form.program_id || selectedProgramId || '';
+    if (canChooseProgram) return form.program_id || selectedProgramId || '';
     return selectedProgramId || '';
-  }, [isAdmin, form.program_id, selectedProgramId]);
+  }, [canChooseProgram, form.program_id, selectedProgramId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,10 +106,7 @@ function Users() {
 
   useEffect(() => {
     if (classGroupsForm.length === 0) return;
-    setForm((prev) => {
-      if (classGroupsForm.some((c) => c.slug === prev.class_group)) return prev;
-      return { ...prev, class_group: classGroupsForm[0].slug };
-    });
+    // keep form as-is; we don't assign turma at registration time
   }, [classGroupsForm]);
 
   const loadData = async () => {
@@ -106,10 +114,14 @@ function Users() {
     setError('');
     try {
       const studentParams = {};
-      if ((user?.role === 'admin' || user?.role === 'sede') && selectedProgramId) {
+      if (canChooseProgram && selectedProgramId) {
         studentParams.program_id = selectedProgramId;
       }
-      if (filterClassGroup && filterClassGroup !== TURMA_FILTER_ALL) {
+      if (
+        filterClassGroup &&
+        filterClassGroup !== TURMA_FILTER_ALL &&
+        filterClassGroup !== '__none__'
+      ) {
         studentParams.class_group = filterClassGroup;
       }
 
@@ -132,13 +144,45 @@ function Users() {
       program_id: prev.program_id || selectedProgramId || '',
     }));
     loadData();
-  }, [selectedProgramId, user?.role, filterClassGroup]);
+  }, [selectedProgramId, canChooseProgram, filterClassGroup]);
+
+  const filteredStudents = useMemo(() => {
+    const q = String(searchQuery || '').trim().toLowerCase();
+    return students.filter((s) => {
+      const name = String(s.full_name || '').toLowerCase();
+      const mat = String(s.enrollment_code || '').toLowerCase();
+      const matchesText = !q || name.includes(q) || mat.includes(q);
+      const matchesTurma =
+        filterClassGroup === TURMA_FILTER_ALL
+          ? true
+          : filterClassGroup === '__none__'
+            ? !s.class_group
+            : s.class_group === filterClassGroup;
+      return matchesText && matchesTurma;
+    });
+  }, [students, searchQuery, filterClassGroup]);
+
+  const assignmentStudents = useMemo(() => {
+    const q = String(assignmentSearchQuery || '').trim().toLowerCase();
+    return students.filter((s) => {
+      const name = String(s.full_name || '').toLowerCase();
+      const mat = String(s.enrollment_code || '').toLowerCase();
+      const matchesText = !q || name.includes(q) || mat.includes(q);
+      const matchesTurma =
+        assignmentClassFilter === TURMA_FILTER_ALL
+          ? true
+          : assignmentClassFilter === '__none__'
+            ? !s.class_group
+            : s.class_group === assignmentClassFilter;
+      return matchesText && matchesTurma;
+    });
+  }, [students, assignmentSearchQuery, assignmentClassFilter]);
 
   const resetForm = () => {
     setForm({
       ...initialForm(),
       program_id: selectedProgramId || '',
-      class_group: classGroupsForm[0]?.slug || 'A',
+      // no class_group by default
     });
     setEditingId(null);
     setActiveTab('manage');
@@ -165,8 +209,9 @@ function Users() {
     setError('');
     setSuccess('');
     try {
-      await classGroupService.create({ program_id: pid, name });
+      await classGroupService.create({ program_id: pid, name, period: newTurmaPeriod });
       setNewTurmaName('');
+      setNewTurmaPeriod('manha');
       setSuccess('Turma cadastrada.');
       const listRes = await classGroupService.list(pid);
       setClassGroupsList(listRes.data || []);
@@ -216,15 +261,12 @@ function Users() {
     setError('');
     setSuccess('');
 
-    if (isAdmin && !form.program_id) {
+    if (canChooseProgram && !form.program_id) {
       setError('Selecione a unidade do aluno.');
       return;
     }
 
-    if (!classGroupsForm.some((c) => c.slug === form.class_group)) {
-      setError('Escolha uma turma válida para a unidade do aluno (cadastre turmas se necessário).');
-      return;
-    }
+    // turma será atribuída em 'Gerenciar turmas'
 
     setSubmitting(true);
 
@@ -238,10 +280,10 @@ function Users() {
         guardian_phone: form.guardian_phone.trim() || null,
         allergies: form.allergies.trim() || null,
         medical_notes: form.medical_notes.trim() || null,
-        class_group: form.class_group,
+        // class_group intentionally omitted: assignment happens in 'Gerenciar turmas'
       };
 
-      if (isAdmin) {
+      if (canChooseProgram) {
         payload.program_id = form.program_id || null;
       }
 
@@ -275,10 +317,22 @@ function Users() {
       allergies: item.allergies || '',
       medical_notes: item.medical_notes || '',
       program_id: programId,
-      class_group: item.class_group || classGroupsForm[0]?.slug || 'A',
+      // class_group left out of the edit form
     });
     setActiveTab('register');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const assignStudentToTurma = async (studentId, turmaSlug) => {
+    setError('');
+    setSuccess('');
+    try {
+      await studentService.update(studentId, { class_group: turmaSlug || null });
+      setSuccess('Atribuição atualizada.');
+      await loadData();
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Falha ao atribuir aluno.');
+    }
   };
 
   const onDelete = async (id) => {
@@ -298,6 +352,12 @@ function Users() {
       setError(err?.response?.data?.message || 'Falha ao remover aluno.');
     }
   };
+
+  const showDetails = (student) => {
+    setSelectedStudentForDetails(student);
+  };
+
+  const closeDetails = () => setSelectedStudentForDetails(null);
 
   const canManageTurmas = Boolean(selectedProgramId && isUuid(selectedProgramId));
 
@@ -337,205 +397,220 @@ function Users() {
           Gerenciar turmas
         </button>
       </div>
+      {selectedStudentForDetails && (
+        <div className="students-modal-backdrop" onClick={closeDetails}>
+          <div className="students-modal" onClick={(e) => e.stopPropagation()}>
+                <h3>Detalhes do aluno</h3>
+                <div style={{ marginBottom: '0.5rem' }} className="detail-row">
+                  <div className="label">Nome</div>
+                  <div>{selectedStudentForDetails.full_name}</div>
+                </div>
+                <div className="detail-row">
+                  <div className="label">Nascimento</div>
+                  <div>{formatDateBR(selectedStudentForDetails.birth_date)}</div>
+                </div>
+                <div className="detail-row">
+                  <div className="label">Matrícula</div>
+                  <div>{selectedStudentForDetails.enrollment_code || '—'}</div>
+                </div>
+                <div className="detail-row">
+                  <div className="label">Contato</div>
+                  <div>{selectedStudentForDetails.contact_phone || '—'}</div>
+                </div>
+                <div className="detail-row">
+                  <div className="label">Responsável</div>
+                  <div>{selectedStudentForDetails.guardian_name || '—'}</div>
+                </div>
+                <div className="detail-row">
+                  <div className="label">Tel. responsável</div>
+                  <div>{selectedStudentForDetails.guardian_phone || '—'}</div>
+                </div>
+                <div className="detail-row">
+                  <div className="label">Alergias</div>
+                  <div>{selectedStudentForDetails.allergies || '—'}</div>
+                </div>
+                <div className="detail-row">
+                  <div className="label">Observações médicas</div>
+                  <div>{selectedStudentForDetails.medical_notes || '—'}</div>
+                </div>
+                <div style={{ marginTop: '0.75rem', textAlign: 'right' }}>
+                  <button className="students-btn students-btn--ghost" type="button" onClick={closeDetails}>
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
-      <div className="students-layout">
-        {activeTab === 'register' && (
-          <section className="students-card" aria-labelledby="form-aluno-titulo">
-          <h2 id="form-aluno-titulo" className="students-card__title">
-            {editingId ? 'Editar cadastro' : 'Novo aluno'}
-          </h2>
-          <p className="students-card__hint">
-            {editingId
-              ? 'Ajuste os dados e salve. Use cancelar para voltar ao cadastro em branco.'
-              : 'Preencha identificação e responsável. Informações de saúde são opcionais, mas recomendadas.'}
-          </p>
+          {activeTab === 'register' && (
+            <section className="students-card" aria-labelledby="cadastro-aluno-titulo">
+              <h2 id="cadastro-aluno-titulo" className="students-card__title">
+                {editingId ? 'Editar aluno' : 'Cadastrar aluno'}
+              </h2>
 
-          <form className="students-form" onSubmit={onSubmit}>
-            <div className="students-section">
-              <span className="students-section__label">Identificação</span>
-              <div className="students-grid2">
-                <div className="students-field students-field--span2">
-                  <label htmlFor="full_name">Nome completo</label>
-                  <input
-                    id="full_name"
-                    type="text"
-                    name="full_name"
-                    autoComplete="name"
-                    placeholder="Nome do participante"
-                    value={form.full_name}
-                    onChange={onChange}
-                    required
-                  />
-                </div>
-                <div className="students-field">
-                  <label htmlFor="birth_date">
-                    Data de nascimento <span className="optional">(opcional)</span>
-                  </label>
-                  <input
-                    id="birth_date"
-                    type="date"
-                    name="birth_date"
-                    value={form.birth_date}
-                    onChange={onChange}
-                  />
-                </div>
-                <div className="students-field">
-                  <label htmlFor="enrollment_code">
-                    Matrícula <span className="optional">(opcional)</span>
-                  </label>
-                  <input
-                    id="enrollment_code"
-                    type="text"
-                    name="enrollment_code"
-                    placeholder="Código interno"
-                    value={form.enrollment_code}
-                    onChange={onChange}
-                  />
-                </div>
-                <div className="students-field">
-                  <label htmlFor="class_group">Turma do aluno</label>
-                  <select
-                    id="class_group"
-                    name="class_group"
-                    value={form.class_group}
-                    onChange={onChange}
-                    required
-                    disabled={classGroupsForm.length === 0}
-                  >
-                    {classGroupsForm.length === 0 ? (
-                      <option value="">Cadastre turmas na unidade…</option>
-                    ) : (
-                      classGroupsForm.map((t) => (
-                        <option key={t.id} value={t.slug}>
-                          {t.name}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </div>
-                {isAdmin && (
-                  <div className="students-field students-field--span2">
-                    <label htmlFor="program_id">Unidade do aluno</label>
-                    <select
-                      id="program_id"
-                      name="program_id"
-                      value={form.program_id}
-                      onChange={onChange}
-                      required
-                    >
-                      <option value="">Selecione a unidade…</option>
-                      {programs.map((program) => (
-                        <option key={program.id} value={program.id}>
-                          {program.name}
-                          {program.location ? ` · ${program.location}` : ''}
-                        </option>
-                      ))}
-                    </select>
+              <form className="students-form" onSubmit={onSubmit}>
+                <div className="students-section">
+                  <span className="students-section__label">Dados pessoais</span>
+                  <div className="students-grid2">
+                    <div className="students-field students-field--span2">
+                      <label htmlFor="full_name">Nome do aluno</label>
+                      <input
+                        id="full_name"
+                        type="text"
+                        name="full_name"
+                        placeholder="Nome completo"
+                        value={form.full_name}
+                        onChange={onChange}
+                        required
+                      />
+                    </div>
+                    <div className="students-field">
+                      <label htmlFor="birth_date">Data de nascimento</label>
+                      <input
+                        id="birth_date"
+                        type="date"
+                        name="birth_date"
+                        value={form.birth_date}
+                        onChange={onChange}
+                      />
+                    </div>
+                    <div className="students-field">
+                      <label htmlFor="enrollment_code">
+                        Matrícula <span className="optional">(opcional)</span>
+                      </label>
+                      <input
+                        id="enrollment_code"
+                        type="text"
+                        name="enrollment_code"
+                        placeholder="Código interno"
+                        value={form.enrollment_code}
+                        onChange={onChange}
+                      />
+                    </div>
+                    <div className="students-field students-field--span2">
+                      <label htmlFor="program_id">Unidade do aluno</label>
+                      {canChooseProgram ? (
+                        <select
+                          id="program_id"
+                          name="program_id"
+                          value={form.program_id}
+                          onChange={onChange}
+                          required
+                        >
+                          <option value="">Selecione a unidade…</option>
+                          {programs.map((program) => (
+                            <option key={program.id} value={program.id}>
+                              {program.name}
+                              {program.location ? ` · ${program.location}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>
+                          {selectedProgramName}
+                        </div>
+                      )}
+                      {!canChooseProgram && <input type="hidden" name="program_id" value={form.program_id} />}
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
+                </div>
 
-            <div className="students-section">
-              <span className="students-section__label">Contato</span>
-              <div className="students-grid2">
-                <div className="students-field students-field--span2">
-                  <label htmlFor="contact_phone">
-                    Telefone / WhatsApp <span className="optional">(opcional)</span>
-                  </label>
-                  <input
-                    id="contact_phone"
-                    type="tel"
-                    name="contact_phone"
-                    placeholder="(00) 00000-0000"
-                    value={form.contact_phone}
-                    onChange={onChange}
-                  />
+                <div className="students-section">
+                  <span className="students-section__label">Contato</span>
+                  <div className="students-grid2">
+                    <div className="students-field students-field--span2">
+                      <label htmlFor="contact_phone">
+                        Telefone / WhatsApp <span className="optional">(opcional)</span>
+                      </label>
+                      <input
+                        id="contact_phone"
+                        type="tel"
+                        name="contact_phone"
+                        placeholder="(00) 00000-0000"
+                        value={form.contact_phone}
+                        onChange={onChange}
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="students-section">
-              <span className="students-section__label">Responsável</span>
-              <div className="students-grid2">
-                <div className="students-field">
-                  <label htmlFor="guardian_name">
-                    Nome <span className="optional">(opcional)</span>
-                  </label>
-                  <input
-                    id="guardian_name"
-                    type="text"
-                    name="guardian_name"
-                    placeholder="Responsável legal"
-                    value={form.guardian_name}
-                    onChange={onChange}
-                  />
+                <div className="students-section">
+                  <span className="students-section__label">Responsável</span>
+                  <div className="students-grid2">
+                    <div className="students-field">
+                      <label htmlFor="guardian_name">
+                        Nome <span className="optional">(opcional)</span>
+                      </label>
+                      <input
+                        id="guardian_name"
+                        type="text"
+                        name="guardian_name"
+                        placeholder="Responsável legal"
+                        value={form.guardian_name}
+                        onChange={onChange}
+                      />
+                    </div>
+                    <div className="students-field">
+                      <label htmlFor="guardian_phone">
+                        Telefone <span className="optional">(opcional)</span>
+                      </label>
+                      <input
+                        id="guardian_phone"
+                        type="tel"
+                        name="guardian_phone"
+                        placeholder="(00) 00000-0000"
+                        value={form.guardian_phone}
+                        onChange={onChange}
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="students-field">
-                  <label htmlFor="guardian_phone">
-                    Telefone <span className="optional">(opcional)</span>
-                  </label>
-                  <input
-                    id="guardian_phone"
-                    type="tel"
-                    name="guardian_phone"
-                    placeholder="(00) 00000-0000"
-                    value={form.guardian_phone}
-                    onChange={onChange}
-                  />
-                </div>
-              </div>
-            </div>
 
-            <div className="students-section">
-              <span className="students-section__label">Saúde e observações</span>
-              <div className="students-grid2">
-                <div className="students-field students-field--span2">
-                  <label htmlFor="allergies">
-                    Alergias <span className="optional">(opcional)</span>
-                  </label>
-                  <input
-                    id="allergies"
-                    type="text"
-                    name="allergies"
-                    placeholder="Ex.: amendoim, lactose…"
-                    value={form.allergies}
-                    onChange={onChange}
-                  />
+                <div className="students-section">
+                  <span className="students-section__label">Saúde e observações</span>
+                  <div className="students-grid2">
+                    <div className="students-field students-field--span2">
+                      <label htmlFor="allergies">
+                        Alergias <span className="optional">(opcional)</span>
+                      </label>
+                      <input
+                        id="allergies"
+                        type="text"
+                        name="allergies"
+                        placeholder="Ex.: amendoim, lactose…"
+                        value={form.allergies}
+                        onChange={onChange}
+                      />
+                    </div>
+                    <div className="students-field students-field--span2">
+                      <label htmlFor="medical_notes">
+                        Observações médicas / cuidados <span className="optional">(opcional)</span>
+                      </label>
+                      <textarea
+                        id="medical_notes"
+                        name="medical_notes"
+                        placeholder="Medicamentos de uso contínuo, limitações, contatos de emergência…"
+                        value={form.medical_notes}
+                        onChange={onChange}
+                        rows={4}
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="students-field students-field--span2">
-                  <label htmlFor="medical_notes">
-                    Observações médicas / cuidados <span className="optional">(opcional)</span>
-                  </label>
-                  <textarea
-                    id="medical_notes"
-                    name="medical_notes"
-                    placeholder="Medicamentos de uso contínuo, limitações, contatos de emergência…"
-                    value={form.medical_notes}
-                    onChange={onChange}
-                    rows={4}
-                  />
-                </div>
-              </div>
-            </div>
 
-            <div className="students-form__actions">
-              <button
-                className="students-btn students-btn--primary"
-                type="submit"
-                disabled={submitting || classGroupsForm.length === 0}
-              >
-                {submitting ? 'Salvando…' : editingId ? 'Salvar alterações' : 'Cadastrar aluno'}
-              </button>
-              {editingId && (
-                <button className="students-btn students-btn--ghost" type="button" onClick={resetForm}>
-                  Cancelar edição
-                </button>
-              )}
-            </div>
-          </form>
-        </section>
-        )}
+                <div className="students-form__actions">
+                  <button className="students-btn students-btn--primary" type="submit" disabled={submitting}>
+                    {submitting ? 'Salvando…' : editingId ? 'Salvar alterações' : 'Cadastrar aluno'}
+                  </button>
+                  {editingId && (
+                    <button className="students-btn students-btn--ghost" type="button" onClick={resetForm}>
+                      Cancelar edição
+                    </button>
+                  )}
+                </div>
+              </form>
+            </section>
+          )}
 
         {activeTab === 'manage' && (
           <section className="students-card" aria-labelledby="lista-alunos-titulo">
@@ -549,6 +624,17 @@ function Users() {
             </div>
 
             <div className="students-toolbar">
+              <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                Buscar
+                <input
+                  type="search"
+                  placeholder="Nome ou matrícula"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{ padding: '0.45rem 0.6rem', borderRadius: '6px', border: '1px solid var(--border)' }}
+                />
+              </label>
+
               <label htmlFor="filter-turma">
                 Filtrar por turma
                 <select
@@ -557,6 +643,7 @@ function Users() {
                   onChange={(e) => setFilterClassGroup(e.target.value)}
                 >
                   <option value={TURMA_FILTER_ALL}>Todas as turmas</option>
+                  <option value="__none__">Sem turma</option>
                   {classGroupsList.map((t) => (
                     <option key={t.id} value={t.slug}>
                       {t.name}
@@ -568,10 +655,10 @@ function Users() {
 
             {loading ? (
               <p className="students-loading">Carregando lista…</p>
-            ) : students.length === 0 ? (
+            ) : filteredStudents.length === 0 ? (
               <div className="students-empty">
-                {filterClassGroup !== TURMA_FILTER_ALL
-                  ? 'Nenhum aluno nesta turma. Troque o filtro ou cadastre alunos nesta turma.'
+                {searchQuery || filterClassGroup !== TURMA_FILTER_ALL
+                  ? 'Nenhum aluno encontrado com os filtros atuais.'
                   : 'Nenhum aluno nesta unidade ainda. Preencha o formulário de cadastro para adicionar.'}
               </div>
             ) : (
@@ -583,28 +670,31 @@ function Users() {
                       <th>Nasc.</th>
                       <th>Matrícula</th>
                       <th>Turma</th>
-                      {isAdmin && <th>Unidade</th>}
+                      {canChooseProgram && <th>Unidade</th>}
                       <th>Contato</th>
                       <th>Ações</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {students.map((item) => (
+                    {filteredStudents.map((item) => (
                     <tr key={item.id}>
                       <td>{item.full_name}</td>
                       <td className="cell-muted">{formatDateBR(item.birth_date)}</td>
                       <td className="cell-muted">{item.enrollment_code || '—'}</td>
                       <td className="cell-muted">{turmaLabel(classGroupsList, item.class_group)}</td>
-                      {isAdmin && <td className="cell-muted">{item.programs?.name || '—'}</td>}
+                      {canChooseProgram && <td className="cell-muted">{item.programs?.name || '—'}</td>}
                       <td className="cell-muted">{item.contact_phone || '—'}</td>
                       <td>
                         <div className="students-table-actions">
-                          <button type="button" onClick={() => startEdit(item)}>
-                            Editar
-                          </button>
-                          <button type="button" className="btn-danger" onClick={() => onDelete(item.id)}>
-                            Excluir
-                          </button>
+                            <button type="button" onClick={() => startEdit(item)}>
+                              Editar
+                            </button>
+                            <button type="button" onClick={(e) => { e.stopPropagation(); showDetails(item); }}>
+                              Detalhes
+                            </button>
+                            <button type="button" className="btn-danger" onClick={() => onDelete(item.id)}>
+                              Excluir
+                            </button>
                         </div>
                       </td>
                     </tr>
@@ -639,6 +729,14 @@ function Users() {
                     maxLength={80}
                     disabled={turmaBusy}
                   />
+                  <select
+                    value={newTurmaPeriod}
+                    onChange={(e) => setNewTurmaPeriod(e.target.value)}
+                    disabled={turmaBusy}
+                  >
+                    <option value="manha">Manhã</option>
+                    <option value="tarde">Tarde</option>
+                  </select>
                   <button
                     type="button"
                     className="students-btn students-btn--primary"
@@ -658,6 +756,9 @@ function Users() {
                         <span>
                           <strong>{t.name}</strong>
                           <span className="students-turmas-list__slug"> ({t.slug})</span>
+                          <span style={{ color: 'var(--text-muted)', marginLeft: '0.4rem', fontSize: '0.86rem' }}>
+                            {t.period ? (t.period === 'manha' ? ' · Manhã' : t.period === 'tarde' ? ' · Tarde' : ` · ${t.period}`) : ''}
+                          </span>
                         </span>
                         <button
                           type="button"
@@ -671,11 +772,85 @@ function Users() {
                     ))}
                   </ul>
                 )}
+                <div className="students-turmas-assign" style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '1.5rem' }}>
+                  <h4 style={{ margin: '0 0 1rem' }}>Atribuir alunos às turmas</h4>
+
+                  <div className="students-toolbar" style={{ marginBottom: '1rem' }}>
+                    <label>
+                      Buscar aluno
+                      <input
+                        type="search"
+                        placeholder="Nome ou matrícula"
+                        value={assignmentSearchQuery}
+                        onChange={(e) => setAssignmentSearchQuery(e.target.value)}
+                      />
+                    </label>
+
+                    <label htmlFor="assignment-filter-turma">
+                      Turma
+                      <select
+                        id="assignment-filter-turma"
+                        value={assignmentClassFilter}
+                        onChange={(e) => setAssignmentClassFilter(e.target.value)}
+                      >
+                        <option value={TURMA_FILTER_ALL}>Todas</option>
+                        <option value="__none__">Sem turma</option>
+                        {classGroupsList.map((turma) => (
+                          <option key={turma.id} value={turma.slug}>
+                            {turma.name}
+                            {turma.period ? ` · ${turma.period === 'manha' ? 'Manhã' : turma.period === 'tarde' ? 'Tarde' : turma.period}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  {classGroupsList.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Nenhuma turma disponível para atribuição.</p>
+                  ) : students.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Nenhum aluno disponível.</p>
+                  ) : assignmentStudents.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Nenhum aluno corresponde aos filtros aplicados.</p>
+                  ) : (
+                    <table className="students-assignment-table">
+                      <thead>
+                        <tr>
+                          <th>Nome</th>
+                          <th>Matrícula</th>
+                          <th>Turma</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {assignmentStudents.map((s) => (
+                          <tr key={s.id}>
+                            <td className="students-assignment-table__name">{s.full_name}</td>
+                            <td className="students-assignment-table__enrollment">{s.enrollment_code || '—'}</td>
+                            <td className="students-assignment-table__turma">
+                              <select
+                                value={s.class_group || ''}
+                                onChange={(e) => assignStudentToTurma(s.id, e.target.value || null)}
+                                className="students-assignment-table__select"
+                              >
+                                <option value="">Sem turma</option>
+                                {classGroupsList.map((turma) => (
+                                  <option key={turma.id} value={turma.slug}>
+                                    {turma.name}
+                                    {turma.period ? ` (${turma.period === 'manha' ? '🌅 Manhã' : turma.period === 'tarde' ? '🌤️ Tarde' : turma.period})` : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               </>
             )}
           </section>
         )}
-      </div>
+
     </div>
   );
 }
