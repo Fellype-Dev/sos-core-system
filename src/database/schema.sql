@@ -27,6 +27,18 @@ create table if not exists user_programs (
     primary key (user_id, program_id)
 );
 
+create table if not exists class_groups (
+    id uuid primary key default gen_random_uuid(),
+    program_id uuid not null references programs(id) on delete cascade,
+    slug text not null,
+    name text not null,
+    sort_order int not null default 0,
+    created_at timestamptz not null default now(),
+    unique (program_id, slug)
+);
+
+create index if not exists idx_class_groups_program on class_groups(program_id);
+
 create table if not exists students (
     id uuid primary key default gen_random_uuid(),
     full_name text not null,
@@ -38,6 +50,7 @@ create table if not exists students (
     allergies text,
     medical_notes text,
     program_id uuid not null references programs(id),
+    class_group text not null default 'A',
     is_active boolean not null default true,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
@@ -73,6 +86,7 @@ create table if not exists attendance_records (
 
 create index if not exists idx_users_email on users(email);
 create index if not exists idx_students_program on students(program_id);
+create index if not exists idx_students_program_class on students(program_id, class_group);
 create index if not exists idx_notes_student on student_notes(student_id);
 create index if not exists idx_attendance_program_date on attendance_sessions(program_id, attendance_date);
 
@@ -100,3 +114,14 @@ values
     ('VIVER', 'Programa Viver', 'Adolescentes', 'Unidade 2'),
     ('SONHAR', 'Programa Sonhar', 'Idosos', 'Unidade 3')
 on conflict (code) do nothing;
+
+insert into class_groups (program_id, slug, name, sort_order)
+select p.id, v.slug, v.name, v.sort_order
+from programs p
+cross join (
+    values ('A', 'Turma A', 0),
+           ('B', 'Turma B', 1)
+) as v (slug, name, sort_order)
+where not exists (
+    select 1 from class_groups cg where cg.program_id = p.id and cg.slug = v.slug
+);
