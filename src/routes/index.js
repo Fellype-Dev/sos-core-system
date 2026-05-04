@@ -6,12 +6,14 @@ const authRoutes = require('./authRoutes');
 const programRoutes = require('./programRoutes');
 const studentRoutes = require('./studentRoutes');
 const attendanceRoutes = require('./attendanceRoutes');
+const classGroupRoutes = require('./classGroupRoutes');
 
 router.use('/users', userRoutes);
 router.use('/auth', authRoutes);
 router.use('/programs', programRoutes);
 router.use('/students', studentRoutes);
 router.use('/attendance', attendanceRoutes);
+router.use('/class-groups', classGroupRoutes);
 
 router.get('/', (req, res) => {
   res.json({
