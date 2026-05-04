@@ -1,10 +1,10 @@
 const MAX_LEN = 32;
 
-/** Valor salvo no aluno; padrão A. */
+/** Valor salvo no aluno; null significa sem turma. */
 function normalizeClassGroup(value) {
-  if (value === undefined || value === null) return 'A';
+  if (value === undefined || value === null) return null;
   const s = String(value).trim();
-  if (!s) return 'A';
+  if (!s) return null;
   return s.length > MAX_LEN ? s.slice(0, MAX_LEN) : s;
 }
 
