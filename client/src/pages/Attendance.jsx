@@ -27,7 +27,8 @@ function turmaLabel(groups, slug) {
 function getRecordDisplayName(record) {
   const student = record?.student;
   if (!student) return record?.student_id || '—';
-  return student.enrollment_code ? `${student.full_name} (${student.enrollment_code})` : student.full_name;
+  const nis = student.nis_user || student.enrollment_code;
+  return nis ? `${student.full_name} (${nis})` : student.full_name;
 }
 
 function cloneAttendanceRecords(detail) {
@@ -146,7 +147,7 @@ function Attendance() {
           }))
         );
       } catch (err) {
-        setError(err?.response?.data?.message || 'Falha ao carregar alunos.');
+        setError(err?.response?.data?.message || 'Falha ao carregar usuarios.');
       } finally {
         setLoading(false);
       }
@@ -236,7 +237,7 @@ function Attendance() {
       }));
 
     if (payloadRecords.length === 0) {
-      setError('Marque pelo menos um aluno como presente ou ausente.');
+      setError('Marque pelo menos um usuario como presente ou ausente.');
       return;
     }
 
@@ -280,7 +281,7 @@ function Attendance() {
 
     const filledRecords = records.filter((record) => record.status === 'present' || record.status === 'absent');
     if (filledRecords.length === 0) {
-      setError('Marque pelo menos um aluno como presente ou ausente.');
+      setError('Marque pelo menos um usuario como presente ou ausente.');
       return;
     }
 
@@ -426,7 +427,7 @@ function Attendance() {
                           <div>
                             <h4 style={{ marginBottom: '0.5rem' }}>Presentes</h4>
                             {present.length === 0 ? (
-                              <p className="students-empty" style={{ margin: 0 }}>Nenhum aluno presente.</p>
+                              <p className="students-empty" style={{ margin: 0 }}>Nenhum usuario presente.</p>
                             ) : (
                               <ul className="students-turmas-list">
                                 {present.map((record) => (
@@ -560,7 +561,7 @@ function Attendance() {
       <table className="attendance-table attendance-marking">
         <thead>
           <tr>
-            <th>Aluno</th>
+            <th>Usuario</th>
             <th>Presente</th>
             <th>Falta</th>
           </tr>
@@ -568,12 +569,12 @@ function Attendance() {
         <tbody>
           {!loading && records.length === 0 && (
             <tr>
-              <td colSpan="3">Nenhum aluno carregado para esta turma.</td>
+              <td colSpan="3">Nenhum usuario carregado para esta turma.</td>
             </tr>
           )}
           {loading && (
             <tr>
-              <td colSpan="3">Carregando alunos…</td>
+              <td colSpan="3">Carregando usuarios…</td>
             </tr>
           )}
           {records.map((record) => (
