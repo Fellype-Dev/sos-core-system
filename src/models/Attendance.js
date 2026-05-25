@@ -169,7 +169,44 @@ class Attendance {
       throw error;
     }
 
-    return data || [];
+    const sessions = data || [];
+    if (sessions.length === 0) {
+      return sessions;
+    }
+
+    const sessionIds = sessions.map((session) => session.id).filter(Boolean);
+    if (sessionIds.length === 0) {
+      return sessions;
+    }
+
+    const { data: records, error: recordsError } = await supabase
+      .from('attendance_records')
+      .select('session_id, status')
+      .in('session_id', sessionIds);
+
+    if (recordsError) {
+      throw recordsError;
+    }
+
+    const countsBySession = new Map();
+    (records || []).forEach((record) => {
+      const current = countsBySession.get(record.session_id) || { present: 0, absent: 0 };
+      if (record.status === 'present') {
+        current.present += 1;
+      } else if (record.status === 'absent') {
+        current.absent += 1;
+      }
+      countsBySession.set(record.session_id, current);
+    });
+
+    return sessions.map((session) => {
+      const counts = countsBySession.get(session.id) || { present: 0, absent: 0 };
+      return {
+        ...session,
+        present_count: counts.present,
+        absent_count: counts.absent,
+      };
+    });
   }
 }
 
