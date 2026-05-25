@@ -51,7 +51,7 @@ function Login() {
           <p className="login-hero__org">Serviço de Obras Sociais</p>
           <h2 className="login-hero__title">SIGU</h2>
           <p className="login-hero__subtitle">
-            Sistema Integrado de Gerenciamento de Unidades SOS
+            Sistema Integrado de Gerenciamento de Usuários SOS
           </p>
           <p className="login-hero__note">
             Cadastro, frequência e relatórios das unidades Semear, Viver e Sonhar em um só lugar.
