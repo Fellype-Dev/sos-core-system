@@ -44,7 +44,7 @@ function Home() {
         const sessionsData = sessionsRes?.data?.data || sessionsRes?.data || sessionsRes || [];
         const classGroupsData = classGroupsRes?.data?.data || classGroupsRes?.data || classGroupsRes || [];
 
-        console.log('Alunos:', studentsData);
+        console.log('Usuarios:', studentsData);
         console.log('Sessões:', sessionsData);
         console.log('Turmas:', classGroupsData);
 
@@ -177,7 +177,7 @@ function Home() {
           boxShadow: '0 4px 15px rgba(6, 182, 212, 0.3)',
           color: '#fff'
         }}>
-          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', opacity: 0.9 }}>Total de Alunos</p>
+          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', opacity: 0.9 }}>Total de Usuarios</p>
           <h2 style={{ margin: 0, fontSize: '2.5rem', fontWeight: 'bold' }}>{analytics.totalStudents}</h2>
         </div>
         <div style={{ 
@@ -252,7 +252,7 @@ function Home() {
             boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
             border: '1px solid #f3f4f6'
           }}>
-            <h3 style={{ marginTop: 0, marginBottom: '1rem', color: '#1f2937', fontWeight: '600' }}>👥 Alunos por Turma</h3>
+            <h3 style={{ marginTop: 0, marginBottom: '1rem', color: '#1f2937', fontWeight: '600' }}>👥 Usuarios por Turma</h3>
             <ResponsiveContainer width="100%" height={280}>
               <PieChart>
                 <Pie

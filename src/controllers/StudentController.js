@@ -42,7 +42,7 @@ class StudentController {
       const classGroupFilter = parseClassGroupFilter(req.query.class_group);
 
       const students = await Student.findAll({ programId, classGroup: classGroupFilter });
-      return ApiResponse.success(res, students, 'Alunos listados com sucesso');
+      return ApiResponse.success(res, students, 'Usuarios listados com sucesso');
     } catch (error) {
       return next(error);
     }
@@ -52,7 +52,7 @@ class StudentController {
     try {
       const student = await Student.findById(req.params.id);
       if (!student) {
-        return ApiResponse.notFound(res, 'Aluno nao encontrado');
+        return ApiResponse.notFound(res, 'Usuario nao encontrado');
       }
 
       const access = this.validateProgramAccess(req, student.program_id);
@@ -60,7 +60,7 @@ class StudentController {
         return ApiResponse.error(res, access.message, 403);
       }
 
-      return ApiResponse.success(res, student, 'Aluno encontrado');
+      return ApiResponse.success(res, student, 'Usuario encontrado');
     } catch (error) {
       return next(error);
     }
@@ -68,16 +68,7 @@ class StudentController {
 
   async store(req, res, next) {
     try {
-      const {
-        full_name,
-        birth_date,
-        enrollment_code,
-        contact_phone,
-        guardian_name,
-        guardian_phone,
-        allergies,
-        medical_notes,
-      } = req.body;
+      const { full_name } = req.body;
 
       if (!full_name) {
         return ApiResponse.error(res, 'Campo obrigatorio: full_name', 400);
@@ -93,21 +84,62 @@ class StudentController {
         return ApiResponse.error(res, 'Unidade invalida ou nao informada', 400);
       }
 
-      const created = await Student.create({
-        full_name,
-        birth_date: birth_date || null,
-        enrollment_code: enrollment_code || null,
-        contact_phone: contact_phone || null,
-        guardian_name: guardian_name || null,
-        guardian_phone: guardian_phone || null,
-        allergies: allergies || null,
-        medical_notes: medical_notes || null,
-        program_id: programId,
-        // class_group omitted: will use DB default or be assigned later via ClassGroup management
-        is_active: true,
+      const allowedFields = [
+        'full_name',
+        'birth_date',
+        'nis_user',
+        'color',
+        'cpf_cns',
+        'is_allergic',
+        'allergy_details',
+        'shoe_size',
+        'clothing_size',
+        'has_health_issues',
+        'health_issues_details',
+        'has_disability',
+        'disability_details',
+        'school_name',
+        'school_grade',
+        'school_shift',
+        'address_street',
+        'address_neighborhood',
+        'address_reference',
+        'address_extra',
+        'guardian_name',
+        'guardian_cpf',
+        'guardian_nis',
+        'guardian_phone',
+        'guardian_relationship',
+        'guardian_workplace',
+        'family_benefit',
+        'family_benefit_details',
+        'family_members',
+        'cras_status',
+        'cras_link_reason',
+        'cras_referral_agency',
+        'cras_technician',
+        'scfv_insertion_date',
+        'scfv_update_date',
+        'scfv_frequency_days',
+        'scfv_shift',
+        'scfv_group',
+        'scfv_instructor',
+        'scfv_boarding',
+        'scfv_disembarkation',
+        'advisor_notes',
+        'enrollment_code',
+      ];
+
+      const payload = { program_id: programId, is_active: true };
+      allowedFields.forEach((field) => {
+        if (req.body[field] !== undefined) {
+          payload[field] = req.body[field];
+        }
       });
 
-      return ApiResponse.success(res, created, 'Aluno criado com sucesso', 201);
+      const created = await Student.create(payload);
+
+      return ApiResponse.success(res, created, 'Usuario criado com sucesso', 201);
     } catch (error) {
       return next(error);
     }
@@ -118,7 +150,7 @@ class StudentController {
       const { id } = req.params;
       const current = await Student.findById(id);
       if (!current) {
-        return ApiResponse.notFound(res, 'Aluno nao encontrado');
+        return ApiResponse.notFound(res, 'Usuario nao encontrado');
       }
 
       const access = this.validateProgramAccess(req, current.program_id);
@@ -130,12 +162,47 @@ class StudentController {
       const allowedFields = [
         'full_name',
         'birth_date',
-        'enrollment_code',
-        'contact_phone',
+        'nis_user',
+        'color',
+        'cpf_cns',
+        'is_allergic',
+        'allergy_details',
+        'shoe_size',
+        'clothing_size',
+        'has_health_issues',
+        'health_issues_details',
+        'has_disability',
+        'disability_details',
+        'school_name',
+        'school_grade',
+        'school_shift',
+        'address_street',
+        'address_neighborhood',
+        'address_reference',
+        'address_extra',
         'guardian_name',
+        'guardian_cpf',
+        'guardian_nis',
         'guardian_phone',
-        'allergies',
-        'medical_notes',
+        'guardian_relationship',
+        'guardian_workplace',
+        'family_benefit',
+        'family_benefit_details',
+        'family_members',
+        'cras_status',
+        'cras_link_reason',
+        'cras_referral_agency',
+        'cras_technician',
+        'scfv_insertion_date',
+        'scfv_update_date',
+        'scfv_frequency_days',
+        'scfv_shift',
+        'scfv_group',
+        'scfv_instructor',
+        'scfv_boarding',
+        'scfv_disembarkation',
+        'advisor_notes',
+        'enrollment_code',
         'is_active',
       ];
 
@@ -159,14 +226,14 @@ class StudentController {
         if (!turmaRow) {
           return ApiResponse.error(
             res,
-            'Turma invalida para a unidade do aluno. Cadastre a turma na unidade ou ajuste a turma/unidade.',
+            'Turma invalida para a unidade do usuario. Cadastre a turma na unidade ou ajuste a turma/unidade.',
             400
           );
         }
       }
 
       const updated = await Student.update(id, updates);
-      return ApiResponse.success(res, updated, 'Aluno atualizado com sucesso');
+      return ApiResponse.success(res, updated, 'Usuario atualizado com sucesso');
     } catch (error) {
       return next(error);
     }
@@ -177,7 +244,7 @@ class StudentController {
       const { id } = req.params;
       const current = await Student.findById(id);
       if (!current) {
-        return ApiResponse.notFound(res, 'Aluno nao encontrado');
+        return ApiResponse.notFound(res, 'Usuario nao encontrado');
       }
 
       const access = this.validateProgramAccess(req, current.program_id);
@@ -186,7 +253,7 @@ class StudentController {
       }
 
       await Student.delete(id);
-      return ApiResponse.success(res, null, 'Aluno removido com sucesso');
+      return ApiResponse.success(res, null, 'Usuario removido com sucesso');
     } catch (error) {
       return next(error);
     }
