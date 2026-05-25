@@ -1,7 +1,7 @@
 const { supabase } = require('../config/database');
 
 const BASE_STUDENT_SELECT =
-  'id, full_name, birth_date, enrollment_code, contact_phone, guardian_name, guardian_phone, allergies, medical_notes, is_active, created_at, updated_at, program_id, class_group, programs(id, code, name, location)';
+  'id, full_name, birth_date, nis_user, color, cpf_cns, is_allergic, allergy_details, shoe_size, clothing_size, has_health_issues, health_issues_details, has_disability, disability_details, school_name, school_grade, school_shift, address_street, address_neighborhood, address_reference, address_extra, guardian_name, guardian_cpf, guardian_nis, guardian_phone, guardian_relationship, guardian_workplace, family_benefit, family_benefit_details, family_members, cras_status, cras_link_reason, cras_referral_agency, cras_technician, scfv_insertion_date, scfv_update_date, scfv_frequency_days, scfv_shift, scfv_group, scfv_instructor, scfv_boarding, scfv_disembarkation, advisor_notes, enrollment_code, is_active, created_at, updated_at, program_id, class_group, programs(id, code, name, location)';
 
 class Student {
   static async findAll({ programId, classGroup } = {}) {

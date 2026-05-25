@@ -120,7 +120,7 @@ class Attendance {
     if (studentIds.length > 0) {
       const { data: students, error } = await supabase
         .from('students')
-        .select('id, full_name, enrollment_code, class_group')
+        .select('id, full_name, nis_user, enrollment_code, class_group')
         .in('id', studentIds);
 
       if (error) {
