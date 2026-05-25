@@ -86,20 +86,3 @@ npm run dev:client
 ```
 npm run seed
 ```
-
-## Credenciais iniciais
-
-- Admin: admin@sos.com / admin123
-- Coordenador Semear: semear@sos.com / coord123
-- Coordenador Viver: viver@sos.com / coord123
-- Coordenador Sonhar: sonhar@sos.com / coord123
-
-## Endpoints principais
-
-- GET /health
-- POST /api/auth/login
-- GET /api/programs
-- GET /api/users
-- POST /api/users
-- PUT /api/users/:id
-- DELETE /api/users/:id
