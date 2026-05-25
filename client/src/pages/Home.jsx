@@ -24,84 +24,98 @@ function Home() {
   const [students, setStudents] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [classGroups, setClassGroups] = useState([]);
+  const [programData, setProgramData] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const currentProgram = availablePrograms.find((program) => program.id === selectedProgramId);
 
   useEffect(() => {
+    const extractData = (response) => response?.data?.data || response?.data || response || [];
+
     const fetchData = async () => {
       try {
         setLoading(true);
 
-        const [studentsRes, sessionsRes, classGroupsRes] = await Promise.all([
-          studentService.getAll({ program_id: selectedProgramId }),
-          attendanceService.getSessions({ program_id: selectedProgramId }),
-          classGroupService.list(selectedProgramId),
-        ]);
+        const programsToFetch = Array.isArray(availablePrograms) && availablePrograms.length > 0
+          ? availablePrograms
+          : selectedProgramId
+            ? [{ id: selectedProgramId, name: 'Unidade ativa' }]
+            : [];
 
-        // Extrai dados corretamente das respostas aninhadas
-        const studentsData = studentsRes?.data?.data || studentsRes?.data || studentsRes || [];
-        const sessionsData = sessionsRes?.data?.data || sessionsRes?.data || sessionsRes || [];
-        const classGroupsData = classGroupsRes?.data?.data || classGroupsRes?.data || classGroupsRes || [];
+        if (programsToFetch.length === 0) {
+          setStudents([]);
+          setSessions([]);
+          setClassGroups([]);
+          setProgramData([]);
+          return;
+        }
 
-        console.log('Usuarios:', studentsData);
-        console.log('Sessões:', sessionsData);
-        console.log('Turmas:', classGroupsData);
+        const results = await Promise.all(
+          programsToFetch.map(async (program) => {
+            const [studentsRes, sessionsRes, classGroupsRes] = await Promise.all([
+              studentService.getAll({ program_id: program.id }),
+              attendanceService.getSessions({ program_id: program.id }),
+              classGroupService.list(program.id),
+            ]);
 
-        setStudents(Array.isArray(studentsData) ? studentsData : []);
-        setSessions(Array.isArray(sessionsData) ? sessionsData : []);
-        setClassGroups(Array.isArray(classGroupsData) ? classGroupsData : []);
+            const studentsData = extractData(studentsRes);
+            const sessionsData = extractData(sessionsRes);
+            const classGroupsData = extractData(classGroupsRes);
+
+            return {
+              program,
+              students: Array.isArray(studentsData) ? studentsData : [],
+              sessions: Array.isArray(sessionsData) ? sessionsData : [],
+              classGroups: Array.isArray(classGroupsData) ? classGroupsData : [],
+            };
+          })
+        );
+
+        const selectedRow = results.find((row) => String(row.program.id) === String(selectedProgramId));
+
+        setProgramData(results);
+        setStudents(selectedRow?.students || []);
+        setSessions(selectedRow?.sessions || []);
+        setClassGroups(selectedRow?.classGroups || []);
       } catch (error) {
         console.error('Erro ao buscar dados:', error);
         setStudents([]);
         setSessions([]);
         setClassGroups([]);
+        setProgramData([]);
       } finally {
         setLoading(false);
       }
     };
 
-    if (selectedProgramId) {
-      fetchData();
-    }
-  }, [selectedProgramId]);
+    fetchData();
+  }, [availablePrograms, selectedProgramId]);
 
   // Cálculos de métricas
-  const analytics = useMemo(() => {
-    const totalStudents = students.length;
+  const buildAnalytics = (listStudents, listSessions, listClassGroups) => {
+    const totalStudents = listStudents.length;
 
-    // Presença x Ausência - considerando todas as sessões
-    let totalRecords = 0;
     let presentCount = 0;
     let absentCount = 0;
 
-    sessions.forEach((session) => {
-      if (session.present_count !== undefined) {
-        presentCount += session.present_count;
-      }
-      if (session.absent_count !== undefined) {
-        absentCount += session.absent_count;
-      }
+    listSessions.forEach((session) => {
+      if (session.present_count !== undefined) presentCount += session.present_count;
+      if (session.absent_count !== undefined) absentCount += session.absent_count;
     });
 
-    totalRecords = presentCount + absentCount;
+    const totalRecords = presentCount + absentCount;
     const attendancePercentage = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
 
-    // Distribuição por turma
     const studentsByTurma = {};
-    students.forEach((student) => {
+    listStudents.forEach((student) => {
       const turma = student.class_group || 'Sem turma';
       studentsByTurma[turma] = (studentsByTurma[turma] || 0) + 1;
     });
 
-    const turmaData = Object.entries(studentsByTurma).map(([name, value]) => ({
-      name,
-      value,
-    }));
+    const turmaData = Object.entries(studentsByTurma).map(([name, value]) => ({ name, value }));
 
-    // Distribuição por período
     const studentsByPeriod = {};
-    classGroups.forEach((group) => {
+    listClassGroups.forEach((group) => {
       const period = group.period || 'Não definido';
       studentsByPeriod[period] = (studentsByPeriod[period] || 0) + (group.students_count || 0);
     });
@@ -111,15 +125,10 @@ function Home() {
       value,
     }));
 
-    // Presença por turma (últimas sessões)
-    const attendanceByTurma = {};
     const turmaStats = {};
-
-    sessions.forEach((session) => {
+    listSessions.forEach((session) => {
       const turma = session.class_group || 'Sem turma';
-      if (!turmaStats[turma]) {
-        turmaStats[turma] = { present: 0, absent: 0 };
-      }
+      if (!turmaStats[turma]) turmaStats[turma] = { present: 0, absent: 0 };
       turmaStats[turma].present += session.present_count || 0;
       turmaStats[turma].absent += session.absent_count || 0;
     });
@@ -128,9 +137,10 @@ function Home() {
       name: turma,
       present: stats.present,
       absent: stats.absent,
-      percentage: stats.present + stats.absent > 0
-        ? Math.round((stats.present / (stats.present + stats.absent)) * 100)
-        : 0,
+      percentage:
+        stats.present + stats.absent > 0
+          ? Math.round((stats.present / (stats.present + stats.absent)) * 100)
+          : 0,
     }));
 
     return {
@@ -143,7 +153,28 @@ function Home() {
       periodData,
       turmaAttendanceData,
     };
-  }, [students, sessions, classGroups]);
+  };
+
+  const analytics = useMemo(() => buildAnalytics(students, sessions, classGroups), [students, sessions, classGroups]);
+
+  const programAnalytics = useMemo(
+    () => programData.map((row) => ({
+      program: row.program,
+      analytics: buildAnalytics(row.students, row.sessions, row.classGroups),
+    })),
+    [programData]
+  );
+
+  const totalStudentsAll = programAnalytics.reduce((sum, row) => sum + row.analytics.totalStudents, 0);
+  const totalPresentAll = programAnalytics.reduce((sum, row) => sum + row.analytics.presentCount, 0);
+  const totalAbsentAll = programAnalytics.reduce((sum, row) => sum + row.analytics.absentCount, 0);
+  const totalRecordsAll = totalPresentAll + totalAbsentAll;
+  const attendanceAll = totalRecordsAll > 0 ? Math.round((totalPresentAll / totalRecordsAll) * 100) : 0;
+
+  const studentsByProgramChart = programAnalytics.map((row) => ({
+    name: row.program?.name || 'Unidade',
+    value: row.analytics.totalStudents,
+  }));
 
   if (loading) {
     return (
@@ -177,8 +208,8 @@ function Home() {
           boxShadow: '0 4px 15px rgba(6, 182, 212, 0.3)',
           color: '#fff'
         }}>
-          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', opacity: 0.9 }}>Total de Usuarios</p>
-          <h2 style={{ margin: 0, fontSize: '2.5rem', fontWeight: 'bold' }}>{analytics.totalStudents}</h2>
+          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', opacity: 0.9 }}>Total de Usuarios (todas as unidades)</p>
+          <h2 style={{ margin: 0, fontSize: '2.5rem', fontWeight: 'bold' }}>{totalStudentsAll}</h2>
         </div>
         <div style={{ 
           padding: '1.5rem', 
@@ -188,8 +219,8 @@ function Home() {
           boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)',
           color: '#fff'
         }}>
-          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', opacity: 0.9 }}>Frequência Geral</p>
-          <h2 style={{ margin: 0, fontSize: '2.5rem', fontWeight: 'bold' }}>{analytics.attendancePercentage}%</h2>
+          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', opacity: 0.9 }}>Frequência Geral (todas)</p>
+          <h2 style={{ margin: 0, fontSize: '2.5rem', fontWeight: 'bold' }}>{attendanceAll}%</h2>
         </div>
         <div style={{ 
           padding: '1.5rem', 
@@ -199,13 +230,35 @@ function Home() {
           boxShadow: '0 4px 15px rgba(139, 92, 246, 0.3)',
           color: '#fff'
         }}>
-          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', opacity: 0.9 }}>Total de Registros</p>
-          <h2 style={{ margin: 0, fontSize: '2.5rem', fontWeight: 'bold' }}>{analytics.totalRecords}</h2>
+          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', opacity: 0.9 }}>Registros de Presença (todas)</p>
+          <h2 style={{ margin: 0, fontSize: '2.5rem', fontWeight: 'bold' }}>{totalRecordsAll}</h2>
         </div>
       </div>
 
       {/* Gráficos */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', marginTop: '2rem' }}>
+        {studentsByProgramChart.length > 0 && (
+          <div style={{ 
+            padding: '1.5rem', 
+            backgroundColor: '#fff', 
+            borderRadius: '12px', 
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+            border: '1px solid #f3f4f6'
+          }}>
+            <h3 style={{ marginTop: 0, marginBottom: '1rem', color: '#1f2937', fontWeight: '600' }}>🏢 Usuarios por Unidade</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={studentsByProgramChart}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="value" name="Usuarios" fill={COLORS.primary} radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
         {/* Gráfico de Pizza - Presença */}
         {analytics.totalRecords > 0 && (
           <div style={{ 
@@ -351,8 +404,36 @@ function Home() {
         )}
       </div>
 
+      {programAnalytics.length > 0 && (
+        <div style={{ marginTop: '2.5rem', display: 'grid', gap: '2rem' }}>
+          {programAnalytics.map((row) => (
+            <section key={row.program?.id || row.program?.name} style={{ padding: '1.5rem', background: '#fff', borderRadius: '12px', border: '1px solid #f3f4f6', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.06)' }}>
+              <h2 style={{ marginTop: 0, marginBottom: '0.5rem' }}>Unidade: {row.program?.name || '—'}</h2>
+              {row.program?.location && (
+                <p style={{ marginTop: 0, color: '#6b7280' }}>{row.program.location}</p>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
+                <div style={{ padding: '1rem', borderRadius: '10px', background: '#f0fdfa', border: '1px solid #ccfbf1' }}>
+                  <p style={{ margin: 0, color: '#0f766e', fontSize: '0.85rem' }}>Usuarios cadastrados</p>
+                  <h3 style={{ margin: 0, fontSize: '1.8rem' }}>{row.analytics.totalStudents}</h3>
+                </div>
+                <div style={{ padding: '1rem', borderRadius: '10px', background: '#f0fdf4', border: '1px solid #dcfce7' }}>
+                  <p style={{ margin: 0, color: '#15803d', fontSize: '0.85rem' }}>Frequência</p>
+                  <h3 style={{ margin: 0, fontSize: '1.8rem' }}>{row.analytics.attendancePercentage}%</h3>
+                </div>
+                <div style={{ padding: '1rem', borderRadius: '10px', background: '#eef2ff', border: '1px solid #e0e7ff' }}>
+                  <p style={{ margin: 0, color: '#3730a3', fontSize: '0.85rem' }}>Registros</p>
+                  <h3 style={{ margin: 0, fontSize: '1.8rem' }}>{row.analytics.totalRecords}</h3>
+                </div>
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+
       <p style={{ marginTop: '2rem', fontSize: '0.95rem', color: '#6b7280', lineHeight: '1.6' }}>
-        📱 O SIGU (Sistema Integrado de Gerenciamento de Unidades SOS) reúne cadastro de participantes,
+        📱 O SIGU (Sistema Integrado para Gerenciamento de Usuários) reúne cadastro de participantes,
         chamada e relatórios de frequência das unidades do Serviço de Obras Sociais.
       </p>
     </section>
