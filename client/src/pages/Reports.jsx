@@ -16,7 +16,7 @@ const REPORT_TYPES = {
   },
   attendance_detail: {
     label: 'Chamada detalhada do dia',
-    description: 'Exporta a lista de alunos presentes e faltosos de uma chamada específica.',
+    description: 'Exporta a lista de usuarios presentes e faltosos de uma chamada específica.',
   },
 };
 
@@ -230,7 +230,7 @@ function Reports() {
         return;
       }
 
-      const detailRows = [['Data', 'Turma', 'Período', 'Aluno', 'Matrícula', 'Status', 'Justificativa']];
+      const detailRows = [['Data', 'Turma', 'Período', 'Usuario', 'NIS', 'Status', 'Justificativa']];
       const summaryRows = [['Data', 'Turma', 'Período', 'Presenças', 'Faltas', 'Criado em', 'Criado por']];
 
       for (const session of sessions) {
@@ -255,7 +255,7 @@ function Reports() {
           classGroupLabel(detail.session?.class_group),
           getPeriodLabel(detail.session?.period),
           record.student?.full_name || '—',
-          record.student?.enrollment_code || '—',
+          record.student?.nis_user || record.student?.enrollment_code || '—',
           record.status === 'present' ? 'Presente' : 'Falta',
           record.note || '—',
         ]);

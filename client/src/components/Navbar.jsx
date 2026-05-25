@@ -53,7 +53,7 @@ function Navbar() {
         <div className="navbar-center">
           <div className="nav-links">
             <NavLink to="/">Início</NavLink>
-            <NavLink to="/alunos">Alunos</NavLink>
+            <NavLink to="/alunos">Usuarios</NavLink>
             <NavLink to="/chamada">Chamada</NavLink>
             <NavLink to="/relatorios">Relatórios</NavLink>
           </div>
