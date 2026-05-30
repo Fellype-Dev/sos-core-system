@@ -1,6 +1,12 @@
 const bcrypt = require('bcrypt');
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '../../../.env') });
+const fs = require('fs');
+
+const envPath = fs.existsSync(path.join(__dirname, '../../../.env'))
+  ? path.join(__dirname, '../../../.env')
+  : path.join(__dirname, '../../../../.env');
+
+require('dotenv').config({ path: envPath });
 
 const { supabase } = require('../../config/database');
 
