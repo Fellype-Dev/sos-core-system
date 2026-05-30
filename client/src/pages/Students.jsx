@@ -5,7 +5,7 @@ import programService from '../services/programService';
 import classGroupService from '../services/classGroupService';
 import referralService from '../services/referralService';
 import { TURMA_FILTER_ALL } from '../constants/turmas';
-import '../styles/Users.css';
+import '../styles/Students.css';
 
 function isUuid(value) {
   return (
@@ -126,7 +126,7 @@ function turmaLabel(groups, slug) {
   return row ? row.name : slug;
 }
 
-function Users() {
+function Students() {
   const { user, selectedProgramId } = useAuth();
   const canChooseProgram = user?.role === 'admin';
 
@@ -1945,4 +1945,4 @@ function Users() {
   );
 }
 
-export default Users;
+export default Students;

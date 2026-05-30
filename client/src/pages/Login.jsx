@@ -61,7 +61,8 @@ function Login() {
 
       <section className="login-aside">
         <div className="login-card">
-          <header className="login-card__header">
+          <header className="login-card__header" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+            <img src="/images/SOS_COLORIDO_PRETO.png" alt="SOS Logo" style={{ height: '70px', marginBottom: '1.25rem', objectFit: 'contain' }} />
             <span className="login-card__badge">Acesso restrito</span>
             <h1 className="login-card__title">Entrar</h1>
             <p className="login-card__lead">

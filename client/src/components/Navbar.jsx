@@ -44,18 +44,24 @@ function Navbar() {
     <header className="site-header">
       <nav className="navbar" aria-label="Principal">
         <div className="navbar-brand">
-          <NavLink to="/" className="navbar-brand__link">
-            <span className="navbar-brand__sigla">SIGU</span>
-            <span className="navbar-brand__full">SOS · Gerenciamento de unidades</span>
+          <NavLink to="/" className="navbar-brand__link" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.75rem' }}>
+            <img src="/images/SOS_COLORIDO_PRETO.png" className="navbar-brand__logo" alt="SOS Logo" />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span className="navbar-brand__sigla" style={{ fontSize: '1.2rem', lineHeight: 1.1 }}>SIGU</span>
+              <span className="navbar-brand__full" style={{ fontSize: '0.68rem', opacity: 0.8 }}>Gerenciamento de Unidades</span>
+            </div>
           </NavLink>
         </div>
 
         <div className="navbar-center">
           <div className="nav-links">
             <NavLink to="/">Início</NavLink>
-            <NavLink to="/alunos">Usuarios</NavLink>
+            <NavLink to="/usuarios">Usuarios</NavLink>
             <NavLink to="/chamada">Chamada</NavLink>
             <NavLink to="/relatorios">Relatórios</NavLink>
+            {(user?.role === 'admin' || user?.role === 'sede') && (
+              <NavLink to="/admin/funcionarios">Funcionários</NavLink>
+            )}
           </div>
         </div>
 
