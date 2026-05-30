@@ -1,7 +1,8 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Login from './pages/Login';
 import Home from './pages/Home';
-import Users from './pages/Users';
+import Students from './pages/Students';
+import UserManagement from './pages/UserManagement';
 import Attendance from './pages/Attendance';
 import Reports from './pages/Reports';
 import NotFound from './pages/NotFound';
@@ -29,10 +30,18 @@ function App() {
               }
             />
             <Route
-              path="/alunos"
+              path="/usuarios"
               element={
                 <ProtectedRoute>
-                  <Users />
+                  <Students />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/funcionarios"
+              element={
+                <ProtectedRoute>
+                  <UserManagement />
                 </ProtectedRoute>
               }
             />

@@ -48,8 +48,8 @@
   display: flex;
   align-items: stretch;
   padding: clamp(1.5rem, 4vw, 3rem);
-  background: linear-gradient(145deg, #063f3b 0%, #0b5d58 42%, #0a4a52 100%);
-  color: #ecfdf5;
+  background: linear-gradient(145deg, #25265e 0%, #3e4095 50%, #4f8024 100%);
+  color: #f8fafc;
 }
 
 .login-hero::after {
@@ -58,7 +58,7 @@
   inset: 0;
   opacity: 0.12;
   background-image: radial-gradient(circle at 20% 20%, #fff 0, transparent 45%),
-    radial-gradient(circle at 80% 60%, #34d399 0, transparent 35%);
+    radial-gradient(circle at 80% 60%, #72b736 0, transparent 35%);
   pointer-events: none;
 }
 
