@@ -25,6 +25,12 @@
   color: inherit;
 }
 
+.navbar-brand__logo {
+  height: 38px;
+  width: auto;
+  object-fit: contain;
+}
+
 .navbar-brand__sigla {
   font-family: var(--font-display);
   font-weight: 700;

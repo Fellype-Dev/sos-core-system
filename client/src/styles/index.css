@@ -10,22 +10,24 @@
   --font-sans: 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
   --font-display: 'Source Serif 4', 'Georgia', serif;
 
-  --brand: #0b5d58;
-  --brand-hover: #094a46;
-  --brand-faint: color-mix(in srgb, var(--brand) 12%, transparent);
+  --brand: #3e4095;
+  --brand-hover: #313377;
+  --brand-faint: rgba(62, 64, 149, 0.08);
+  --brand-sec: #72b736;
+  --brand-sec-hover: #5d972b;
 
   --text: #0f172a;
   --text-muted: #64748b;
 
   --surface: #ffffff;
-  --surface-muted: #f1f5f9;
+  --surface-muted: #f8fafc;
   --surface-elevated: #ffffff;
 
   --border: #e2e8f0;
   --border-subtle: #f1f5f9;
 
-  --danger: #b91c1c;
-  --success: #047857;
+  --danger: #ef4444;
+  --success: #10b981;
 
   --radius: 12px;
   --radius-sm: 8px;

@@ -4,10 +4,11 @@
   "description": "Sistema SOS Core - Backend API",
   "main": "index.js",
   "scripts": {
-    "start": "node ..\\index.js",
-    "dev": "nodemon --watch ../src --watch ../index.js ../index.js",
+    "start": "node index.js",
+    "dev": "nodemon --watch src --watch index.js index.js",
     "test": "jest --coverage",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "seed": "node src/database/seeders/initial-seed.js"
   },
   "keywords": ["api", "express", "postgresql", "mvc"],
   "author": "Fellype",

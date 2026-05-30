@@ -9,7 +9,7 @@ import useAuth from '../hooks/useAuth';
 import attendanceService from '../services/attendanceService';
 import classGroupService from '../services/classGroupService';
 import studentService from '../services/studentService';
-import '../styles/Users.css';
+import '../styles/Students.css';
 
 const COLORS = {
   primary: '#06b6d4',
