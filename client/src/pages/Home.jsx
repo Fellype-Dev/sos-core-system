@@ -2,14 +2,16 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   PieChart, Pie, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
 } from 'recharts';
+import { Users, Calendar, TrendingUp, Sparkles, Building, BarChart3, PieChart as PieIcon, Clock } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
 import studentService from '../services/studentService';
 import attendanceService from '../services/attendanceService';
 import classGroupService from '../services/classGroupService';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/card';
 
 const COLORS = {
-  primary: '#06b6d4',
-  success: '#10b981',
+  primary: '#3e4095',
+  success: '#72b736',
   danger: '#ef4444',
   warning: '#f59e0b',
   info: '#3b82f6',
@@ -17,7 +19,7 @@ const COLORS = {
   accent: '#ec4899',
 };
 
-const PALETTE = ['#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
+const PALETTE = ['#3e4095', '#72b736', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
 
 function Home() {
   const { user, availablePrograms, selectedProgramId } = useAuth();
@@ -178,265 +180,259 @@ function Home() {
 
   if (loading) {
     return (
-      <section className="panel">
-        <h1>Painel inicial</h1>
-        <p>Carregando dados...</p>
-      </section>
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-indigo-600" />
+        <p className="text-sm font-bold text-slate-500">Carregando métricas da unidade...</p>
+      </div>
     );
   }
 
   return (
-    <section className="panel">
-      <h1>Painel inicial</h1>
-      <p>
-        Bem-vindo(a), <strong>{user?.full_name || 'Usuário(a)'}</strong>.
-      </p>
-      <p>
-        Unidade ativa: <strong>{currentProgram?.name || '—'}</strong>
-        {user?.role === 'admin' && availablePrograms?.length > 1 && (
-          <span> — use o seletor no topo para alternar entre unidades.</span>
-        )}
-      </p>
-
-      {/* Cards de resumo */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem', marginTop: '1.5rem' }}>
-        <div style={{ 
-          padding: '1.5rem', 
-          backgroundColor: 'linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)',
-          backgroundImage: 'linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)',
-          borderRadius: '12px', 
-          boxShadow: '0 4px 15px rgba(6, 182, 212, 0.3)',
-          color: '#fff'
-        }}>
-          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', opacity: 0.9 }}>Total de Usuarios (todas as unidades)</p>
-          <h2 style={{ margin: 0, fontSize: '2.5rem', fontWeight: 'bold' }}>{totalStudentsAll}</h2>
-        </div>
-        <div style={{ 
-          padding: '1.5rem', 
-          backgroundColor: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-          backgroundImage: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-          borderRadius: '12px', 
-          boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)',
-          color: '#fff'
-        }}>
-          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', opacity: 0.9 }}>Frequência Geral (todas)</p>
-          <h2 style={{ margin: 0, fontSize: '2.5rem', fontWeight: 'bold' }}>{attendanceAll}%</h2>
-        </div>
-        <div style={{ 
-          padding: '1.5rem', 
-          backgroundColor: 'linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%)',
-          backgroundImage: 'linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%)',
-          borderRadius: '12px', 
-          boxShadow: '0 4px 15px rgba(139, 92, 246, 0.3)',
-          color: '#fff'
-        }}>
-          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', opacity: 0.9 }}>Registros de Presença (todas)</p>
-          <h2 style={{ margin: 0, fontSize: '2.5rem', fontWeight: 'bold' }}>{totalRecordsAll}</h2>
+    <div className="space-y-8 font-sans pb-12">
+      {/* Welcome Card banner */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 p-8 text-white shadow-xl shadow-indigo-950/20">
+        <div className="absolute top-[-20%] right-[-10%] w-80 h-80 rounded-full bg-indigo-500/15 blur-3xl pointer-events-none" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-60 h-60 rounded-full bg-emerald-500/5 blur-3xl pointer-events-none" />
+        
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-extrabold tracking-tight">Painel de Monitoramento</h1>
+            <p className="text-indigo-200/95 font-semibold text-sm">
+              Bem-vindo(a), <span className="text-white font-extrabold">{user?.full_name || 'Usuário(a)'}</span>.
+            </p>
+          </div>
+          
+          <div className="flex items-center gap-2.5 bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/10 shrink-0">
+            <div className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-xs font-bold text-slate-100 uppercase tracking-wider">Unidade ativa: {currentProgram?.name || '—'}</span>
+          </div>
         </div>
       </div>
 
-      {/* Gráficos */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', marginTop: '2rem' }}>
+      {/* Summary Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Card 1: Total Users */}
+        <Card className="border-slate-100 shadow-lg shadow-slate-100/40 relative overflow-hidden bg-white group hover:shadow-xl transition-shadow duration-300">
+          <div className="absolute top-0 left-0 h-full w-1.5 bg-indigo-500" />
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total de Usuários</p>
+              <p className="text-3xl font-extrabold text-slate-900">{totalStudentsAll}</p>
+              <p className="text-[10px] text-slate-400 font-semibold">Todas as unidades ativas</p>
+            </div>
+            <div className="p-3.5 bg-indigo-50 text-indigo-600 rounded-2xl group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">
+              <Users className="h-6 w-6" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card 2: Attendance percentage */}
+        <Card className="border-slate-100 shadow-lg shadow-slate-100/40 relative overflow-hidden bg-white group hover:shadow-xl transition-shadow duration-300">
+          <div className="absolute top-0 left-0 h-full w-1.5 bg-emerald-500" />
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Frequência Geral</p>
+              <p className="text-3xl font-extrabold text-slate-900">{attendanceAll}%</p>
+              <p className="text-[10px] text-slate-400 font-semibold">Média de todas as unidades</p>
+            </div>
+            <div className="p-3.5 bg-emerald-50 text-emerald-600 rounded-2xl group-hover:bg-emerald-600 group-hover:text-white transition-colors duration-300">
+              <TrendingUp className="h-6 w-6" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card 3: Attendance records */}
+        <Card className="border-slate-100 shadow-lg shadow-slate-100/40 relative overflow-hidden bg-white group hover:shadow-xl transition-shadow duration-300">
+          <div className="absolute top-0 left-0 h-full w-1.5 bg-violet-500" />
+          <CardContent className="p-6 flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Registros de Frequência</p>
+              <p className="text-3xl font-extrabold text-slate-900">{totalRecordsAll}</p>
+              <p className="text-[10px] text-slate-400 font-semibold">Presenças e faltas lançadas</p>
+            </div>
+            <div className="p-3.5 bg-violet-50 text-violet-600 rounded-2xl group-hover:bg-violet-600 group-hover:text-white transition-colors duration-300">
+              <Calendar className="h-6 w-6" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Graphs Sections */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Graph 1: Users by unit */}
         {studentsByProgramChart.length > 0 && (
-          <div style={{ 
-            padding: '1.5rem', 
-            backgroundColor: '#fff', 
-            borderRadius: '12px', 
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
-            border: '1px solid #f3f4f6'
-          }}>
-            <h3 style={{ marginTop: 0, marginBottom: '1rem', color: '#1f2937', fontWeight: '600' }}>🏢 Usuarios por Unidade</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={studentsByProgramChart}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="value" name="Usuarios" fill={COLORS.primary} radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <Card className="border-slate-100 shadow-lg shadow-slate-100/30 bg-white rounded-2xl overflow-hidden">
+            <CardHeader className="border-b border-slate-100/50 pb-4">
+              <div className="flex items-center gap-2">
+                <Building className="h-5 w-5 text-indigo-600" />
+                <CardTitle className="text-base font-bold text-slate-900">Usuários por Unidade</CardTitle>
+              </div>
+              <CardDescription className="text-xs text-slate-400">Total de participantes cadastrados em cada polo</CardDescription>
+            </CardHeader>
+            <CardContent className="p-6 pt-8">
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={studentsByProgramChart}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fontWeight: 600, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fontWeight: 600, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }} />
+                  <Legend wrapperStyle={{ fontSize: 11, fontWeight: 600 }} />
+                  <Bar dataKey="value" name="Usuários" fill={COLORS.primary} radius={[6, 6, 0, 0]} maxBarSize={50} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
         )}
 
-        {/* Gráfico de Pizza - Presença */}
+        {/* Graph 2: Attendance Status */}
         {analytics.totalRecords > 0 && (
-          <div style={{ 
-            padding: '1.5rem', 
-            backgroundColor: '#fff', 
-            borderRadius: '12px', 
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
-            border: '1px solid #f3f4f6'
-          }}>
-            <h3 style={{ marginTop: 0, marginBottom: '1rem', color: '#1f2937', fontWeight: '600' }}>📊 Status de Frequência</h3>
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie
-                  data={[
-                    { name: 'Presente', value: analytics.presentCount },
-                    { name: 'Ausente', value: analytics.absentCount },
-                  ]}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={true}
-                  label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
-                  outerRadius={90}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  <Cell fill={COLORS.success} />
-                  <Cell fill={COLORS.danger} />
-                </Pie>
-                <Tooltip 
-                  formatter={(value) => value}
-                  contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+          <Card className="border-slate-100 shadow-lg shadow-slate-100/30 bg-white rounded-2xl overflow-hidden">
+            <CardHeader className="border-b border-slate-100/50 pb-4">
+              <div className="flex items-center gap-2">
+                <PieIcon className="h-5 w-5 text-indigo-600" />
+                <CardTitle className="text-base font-bold text-slate-900">Status de Frequência</CardTitle>
+              </div>
+              <CardDescription className="text-xs text-slate-400">Proporção geral de presenças e faltas da unidade ativa</CardDescription>
+            </CardHeader>
+            <CardContent className="p-6">
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: 'Presente', value: analytics.presentCount },
+                      { name: 'Ausente', value: analytics.absentCount },
+                    ]}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={true}
+                    label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
+                    outerRadius={85}
+                    dataKey="value"
+                  >
+                    <Cell fill={COLORS.success} />
+                    <Cell fill={COLORS.danger} />
+                  </Pie>
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
         )}
 
-        {/* Gráfico de Pizza - Distribuição por Turma */}
+        {/* Graph 3: Users by Class Group */}
         {analytics.turmaData.length > 0 && (
-          <div style={{ 
-            padding: '1.5rem', 
-            backgroundColor: '#fff', 
-            borderRadius: '12px', 
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
-            border: '1px solid #f3f4f6'
-          }}>
-            <h3 style={{ marginTop: 0, marginBottom: '1rem', color: '#1f2937', fontWeight: '600' }}>👥 Usuarios por Turma</h3>
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie
-                  data={analytics.turmaData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={true}
-                  label={({ name, value }) => `${name}: ${value}`}
-                  outerRadius={90}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {analytics.turmaData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  formatter={(value) => value}
-                  contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+          <Card className="border-slate-100 shadow-lg shadow-slate-100/30 bg-white rounded-2xl overflow-hidden">
+            <CardHeader className="border-b border-slate-100/50 pb-4">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-indigo-600" />
+                <CardTitle className="text-base font-bold text-slate-900">Usuários por Turma</CardTitle>
+              </div>
+              <CardDescription className="text-xs text-slate-400">Distribuição quantitativa de participantes cadastrados por turma</CardDescription>
+            </CardHeader>
+            <CardContent className="p-6">
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie
+                    data={analytics.turmaData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={true}
+                    label={({ name, value }) => `${name}: ${value}`}
+                    outerRadius={85}
+                    dataKey="value"
+                  >
+                    {analytics.turmaData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
         )}
 
-        {/* Gráfico de Pizza - Distribuição por Período */}
+        {/* Graph 4: Distribution by Period */}
         {analytics.periodData.length > 0 && (
-          <div style={{ 
-            padding: '1.5rem', 
-            backgroundColor: '#fff', 
-            borderRadius: '12px', 
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
-            border: '1px solid #f3f4f6'
-          }}>
-            <h3 style={{ marginTop: 0, marginBottom: '1rem', color: '#1f2937', fontWeight: '600' }}>🕐 Distribuição por Período</h3>
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie
-                  data={analytics.periodData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={true}
-                  label={({ name, value }) => `${name}: ${value}`}
-                  outerRadius={90}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  <Cell fill={COLORS.info} />
-                  <Cell fill={COLORS.warning} />
-                </Pie>
-                <Tooltip 
-                  formatter={(value) => value}
-                  contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-
-        {/* Gráfico de Pizza - Frequência por Turma */}
-        {analytics.turmaAttendanceData.length > 0 && (
-          <div style={{ 
-            padding: '1.5rem', 
-            backgroundColor: '#fff', 
-            borderRadius: '12px', 
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
-            border: '1px solid #f3f4f6'
-          }}>
-            <h3 style={{ marginTop: 0, marginBottom: '1rem', color: '#1f2937', fontWeight: '600' }}>📈 Taxa de Frequência</h3>
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie
-                  data={analytics.turmaAttendanceData.map(item => ({
-                    name: `${item.name} (${item.percentage}%)`,
-                    value: item.percentage
-                  }))}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={true}
-                  label={({ name, value }) => `${name}`}
-                  outerRadius={90}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {analytics.turmaAttendanceData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  formatter={(value) => `${value}%`}
-                  contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+          <Card className="border-slate-100 shadow-lg shadow-slate-100/30 bg-white rounded-2xl overflow-hidden">
+            <CardHeader className="border-b border-slate-100/50 pb-4">
+              <div className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-indigo-600" />
+                <CardTitle className="text-base font-bold text-slate-900">Distribuição por Período</CardTitle>
+              </div>
+              <CardDescription className="text-xs text-slate-400">Proporção de usuários atendidos nos turnos da manhã e tarde</CardDescription>
+            </CardHeader>
+            <CardContent className="p-6">
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie
+                    data={analytics.periodData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={true}
+                    label={({ name, value }) => `${name}: ${value}`}
+                    outerRadius={85}
+                    dataKey="value"
+                  >
+                    <Cell fill={COLORS.info} />
+                    <Cell fill={COLORS.warning} />
+                  </Pie>
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
         )}
       </div>
 
+      {/* Program Analytics Cards (Sede view only) */}
       {programAnalytics.length > 0 && (
-        <div style={{ marginTop: '2.5rem', display: 'grid', gap: '2rem' }}>
-          {programAnalytics.map((row) => (
-            <section key={row.program?.id || row.program?.name} style={{ padding: '1.5rem', background: '#fff', borderRadius: '12px', border: '1px solid #f3f4f6', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.06)' }}>
-              <h2 style={{ marginTop: 0, marginBottom: '0.5rem' }}>Unidade: {row.program?.name || '—'}</h2>
-              {row.program?.location && (
-                <p style={{ marginTop: 0, color: '#6b7280' }}>{row.program.location}</p>
-              )}
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
-                <div style={{ padding: '1rem', borderRadius: '10px', background: '#f0fdfa', border: '1px solid #ccfbf1' }}>
-                  <p style={{ margin: 0, color: '#0f766e', fontSize: '0.85rem' }}>Usuarios cadastrados</p>
-                  <h3 style={{ margin: 0, fontSize: '1.8rem' }}>{row.analytics.totalStudents}</h3>
-                </div>
-                <div style={{ padding: '1rem', borderRadius: '10px', background: '#f0fdf4', border: '1px solid #dcfce7' }}>
-                  <p style={{ margin: 0, color: '#15803d', fontSize: '0.85rem' }}>Frequência</p>
-                  <h3 style={{ margin: 0, fontSize: '1.8rem' }}>{row.analytics.attendancePercentage}%</h3>
-                </div>
-                <div style={{ padding: '1rem', borderRadius: '10px', background: '#eef2ff', border: '1px solid #e0e7ff' }}>
-                  <p style={{ margin: 0, color: '#3730a3', fontSize: '0.85rem' }}>Registros</p>
-                  <h3 style={{ margin: 0, fontSize: '1.8rem' }}>{row.analytics.totalRecords}</h3>
-                </div>
-              </div>
-            </section>
-          ))}
+        <div className="space-y-4 pt-2">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-indigo-600" />
+            <h2 className="text-lg font-extrabold text-slate-900">Métricas Detalhadas por Unidade</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {programAnalytics.map((row) => (
+              <Card key={row.program?.id || row.program?.name} className="border-slate-100 shadow-lg shadow-slate-100/30 bg-white hover:border-indigo-200 transition-colors duration-300">
+                <CardHeader className="pb-3 border-b border-slate-100/50">
+                  <CardTitle className="text-base font-bold text-slate-900">{row.program?.name || '—'}</CardTitle>
+                  {row.program?.location && (
+                    <CardDescription className="text-[11px] text-slate-400 leading-tight">{row.program.location}</CardDescription>
+                  )}
+                </CardHeader>
+                <CardContent className="p-6 space-y-4">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-3 bg-indigo-50/40 border border-indigo-100/40 rounded-xl text-center">
+                      <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wider block">Cadastros</span>
+                      <span className="text-lg font-extrabold text-slate-900 block mt-0.5">{row.analytics.totalStudents}</span>
+                    </div>
+                    <div className="p-3 bg-emerald-50/40 border border-emerald-100/40 rounded-xl text-center">
+                      <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider block">Frequência</span>
+                      <span className="text-lg font-extrabold text-slate-900 block mt-0.5">{row.analytics.attendancePercentage}%</span>
+                    </div>
+                    <div className="p-3 bg-violet-50/40 border border-violet-100/40 rounded-xl text-center">
+                      <span className="text-[9px] font-bold text-violet-600 uppercase tracking-wider block">Registros</span>
+                      <span className="text-lg font-extrabold text-slate-900 block mt-0.5">{row.analytics.totalRecords}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       )}
 
-      <p style={{ marginTop: '2rem', fontSize: '0.95rem', color: '#6b7280', lineHeight: '1.6' }}>
-        📱 O SIGU (Sistema Integrado para Gerenciamento de Usuários) reúne cadastro de participantes,
-        chamada e relatórios de frequência das unidades do Serviço de Obras Sociais.
-      </p>
-    </section>
+      {/* Informações adicionais rodapé */}
+      <Card className="border-slate-100/70 shadow-sm bg-slate-50/50 p-6 rounded-2xl">
+        <p className="text-xs text-slate-500 leading-relaxed max-w-3xl">
+          📱 O <strong>SIGU</strong> (Sistema Integrado para Gerenciamento de Usuários) centraliza o controle
+          operacional do Serviço de Obras Sociais. Ele integra cadastros de participantes, chamadas diárias,
+          análises de turmas e relatórios de frequência de todas as unidades ativas para auditorias e planejamentos.
+        </p>
+      </Card>
+    </div>
   );
 }
 

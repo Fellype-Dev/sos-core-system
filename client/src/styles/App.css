@@ -8,7 +8,7 @@
   max-width: none;
 }
 
-.container {
+.site-container {
   width: min(1180px, 94vw);
   margin: 1.5rem auto;
 }
