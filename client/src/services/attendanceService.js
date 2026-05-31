@@ -16,6 +16,11 @@ const attendanceService = {
     return response.data;
   },
 
+  getBulkSessionDetails: async (params = {}) => {
+    const response = await api.get('/attendance/sessions/bulk-detail', { params });
+    return response.data;
+  },
+
   save: async (payload) => {
     const response = await api.post('/attendance', payload);
     return response.data;

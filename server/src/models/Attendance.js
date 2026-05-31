@@ -4,7 +4,7 @@ class Attendance {
   static async findSessionById(sessionId) {
     const { data, error } = await supabase
       .from('attendance_sessions')
-      .select('id, program_id, attendance_date, class_group, period, created_by, created_at')
+      .select('id, program_id, attendance_date, class_group, period, created_by, created_at, creator:users!created_by(full_name)')
       .eq('id', sessionId)
       .maybeSingle();
 
@@ -18,7 +18,7 @@ class Attendance {
   static async findSession({ programId, attendanceDate, classGroup, period }) {
     const { data, error } = await supabase
       .from('attendance_sessions')
-      .select('id, program_id, attendance_date, class_group, period, created_by, created_at')
+      .select('id, program_id, attendance_date, class_group, period, created_by, created_at, creator:users!created_by(full_name)')
       .eq('program_id', programId)
       .eq('attendance_date', attendanceDate)
       .eq('class_group', classGroup || '')
@@ -141,7 +141,7 @@ class Attendance {
   static async listSessions({ programId, attendanceDate, classGroup, period } = {}) {
     let query = supabase
       .from('attendance_sessions')
-      .select('id, program_id, attendance_date, class_group, period, created_by, created_at')
+      .select('id, program_id, attendance_date, class_group, period, created_by, created_at, creator:users!created_by(full_name)')
       .order('attendance_date', { ascending: false })
       .order('created_at', { ascending: false });
 
@@ -207,6 +207,92 @@ class Attendance {
         absent_count: counts.absent,
       };
     });
+  }
+
+  static async getBulkSessionDetails({ programId, attendanceDate, startDate, endDate, classGroup, period }) {
+    let query = supabase
+      .from('attendance_sessions')
+      .select('id, program_id, attendance_date, class_group, period, created_by, created_at, creator:users!created_by(full_name)');
+
+    if (programId) {
+      query = query.eq('program_id', programId);
+    }
+
+    if (attendanceDate) {
+      query = query.eq('attendance_date', attendanceDate);
+    }
+
+    if (startDate) {
+      query = query.gte('attendance_date', startDate);
+    }
+
+    if (endDate) {
+      query = query.lte('attendance_date', endDate);
+    }
+
+    if (classGroup !== undefined && classGroup !== null && classGroup !== '') {
+      query = query.eq('class_group', classGroup);
+    } else if (classGroup === '') {
+      query = query.eq('class_group', '');
+    }
+
+    if (period !== undefined && period !== null && period !== '') {
+      query = query.eq('period', period);
+    }
+
+    const { data: sessions, error: sessionsError } = await query;
+    if (sessionsError) {
+      throw sessionsError;
+    }
+
+    if (!sessions || sessions.length === 0) {
+      return [];
+    }
+
+    const sessionIds = sessions.map((s) => s.id).filter(Boolean);
+    if (sessionIds.length === 0) {
+      return sessions.map((session) => ({ session, records: [] }));
+    }
+
+    const { data: records, error: recordsError } = await supabase
+      .from('attendance_records')
+      .select('session_id, student_id, status, note, created_at')
+      .in('session_id', sessionIds);
+
+    if (recordsError) {
+      throw recordsError;
+    }
+
+    const studentIds = [...new Set((records || []).map((record) => record.student_id).filter(Boolean))];
+    let studentsById = new Map();
+    if (studentIds.length > 0) {
+      const { data: students, error: studentsError } = await supabase
+        .from('students')
+        .select('id, full_name, nis_user, enrollment_code, class_group')
+        .in('id', studentIds);
+
+      if (studentsError) {
+        throw studentsError;
+      }
+      studentsById = new Map((students || []).map((student) => [student.id, student]));
+    }
+
+    const recordsBySession = new Map();
+    (records || []).forEach((record) => {
+      const merged = {
+        ...record,
+        student: studentsById.get(record.student_id) || null,
+      };
+      if (!recordsBySession.has(record.session_id)) {
+        recordsBySession.set(record.session_id, []);
+      }
+      recordsBySession.get(record.session_id).push(merged);
+    });
+
+    return sessions.map((session) => ({
+      session,
+      records: recordsBySession.get(session.id) || [],
+    }));
   }
 }
 

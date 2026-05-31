@@ -18,7 +18,7 @@ function App() {
     <Router>
       <div className="app">
         {isAuthenticated && <Navbar />}
-        <main className={isAuthenticated ? 'container' : 'main-full-bleed'}>
+        <main className={isAuthenticated ? 'site-container' : 'main-full-bleed'}>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route
