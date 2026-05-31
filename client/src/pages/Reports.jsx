@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   PieChart, Pie, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
 } from 'recharts';
-import { FileSpreadsheet, FileText, Sparkles, Filter, Calendar, CheckCircle, ShieldAlert, Clock, Building, BarChart3, PieChart as PieIcon, Info } from 'lucide-react';
+import { FileSpreadsheet, FileText, Sparkles, Filter, Calendar, CheckCircle, ShieldAlert, Clock, Building, BarChart3, PieChart as PieIcon, Info, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas-pro';
+import { jsPDF } from 'jspdf';
 import useAuth from '../hooks/useAuth';
 import attendanceService from '../services/attendanceService';
 import classGroupService from '../services/classGroupService';
@@ -214,7 +214,12 @@ function Reports() {
         const studentsByPeriod = {};
         listClassGroups.forEach((g) => {
           const p = g.period || 'Não definido';
-          studentsByPeriod[p] = (studentsByPeriod[p] || 0) + (g.students_count || 0);
+          studentsByPeriod[p] = 0;
+        });
+        listStudents.forEach((student) => {
+          const g = listClassGroups.find((cg) => cg.slug === student.class_group);
+          const p = g?.period || 'Não definido';
+          studentsByPeriod[p] = (studentsByPeriod[p] || 0) + 1;
         });
         const periodData = Object.entries(studentsByPeriod).map(([name, value]) => ({
           name: name === 'manha' ? 'Manhã' : name === 'tarde' ? 'Tarde' : name,
@@ -497,7 +502,19 @@ function Reports() {
     setError('');
     try {
       const element = previewRef.current;
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true });
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        onclone: (clonedDoc) => {
+          clonedDoc.querySelectorAll('svg').forEach((svg) => {
+            const bbox = svg.getBoundingClientRect();
+            svg.setAttribute('width', bbox.width || svg.clientWidth || 300);
+            svg.setAttribute('height', bbox.height || svg.clientHeight || 200);
+            svg.style.width = null;
+            svg.style.height = null;
+          });
+        }
+      });
       const imgData = canvas.toDataURL('image/png');
 
       const pdf = new jsPDF({
@@ -532,7 +549,7 @@ function Reports() {
       setSuccess('Relatório PDF exportado com sucesso.');
     } catch (err) {
       console.error('Erro ao gerar PDF:', err);
-      setError('Falha ao exportar o relatório consolidado em PDF.');
+      setError(`Falha ao exportar o relatório consolidado em PDF: ${err.message || err}`);
     } finally {
       setPdfLoading(false);
     }
@@ -804,7 +821,7 @@ function Reports() {
                 Nenhum dado consolidado disponível nesta unidade para renderizar gráficos.
               </div>
             ) : (
-              <div ref={previewRef} className="bg-white p-6 rounded-2xl border border-slate-150 shadow-sm space-y-8">
+              <div ref={previewRef} id="pdf-preview-container" className="bg-white p-6 rounded-2xl border border-slate-150 shadow-sm space-y-8">
                 {/* Stats row */}
                 <div className="grid grid-cols-3 gap-4">
                   <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-100/80">

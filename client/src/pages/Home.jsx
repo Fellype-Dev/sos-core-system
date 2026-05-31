@@ -119,7 +119,12 @@ function Home() {
     const studentsByPeriod = {};
     listClassGroups.forEach((group) => {
       const period = group.period || 'Não definido';
-      studentsByPeriod[period] = (studentsByPeriod[period] || 0) + (group.students_count || 0);
+      studentsByPeriod[period] = 0;
+    });
+    listStudents.forEach((student) => {
+      const group = listClassGroups.find((g) => g.slug === student.class_group);
+      const period = group?.period || 'Não definido';
+      studentsByPeriod[period] = (studentsByPeriod[period] || 0) + 1;
     });
 
     const periodData = Object.entries(studentsByPeriod).map(([name, value]) => ({
