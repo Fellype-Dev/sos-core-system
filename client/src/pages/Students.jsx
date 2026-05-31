@@ -180,12 +180,12 @@ function Students() {
   const [turmaBusy, setTurmaBusy] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [assignmentSearchQuery, setAssignmentSearchQuery] = useState('');
-  const [assignmentClassFilter, setAssignmentClassFilter] = useState(TURMA_FILTER_ALL);
   const [selectedStudentForDetails, setSelectedStudentForDetails] = useState(null);
   const [selectedReferralId, setSelectedReferralId] = useState('');
   const [referralForm, setReferralForm] = useState(initialReferralForm);
   const [referralSaving, setReferralSaving] = useState(false);
   const [selectedReferralForModal, setSelectedReferralForModal] = useState(null);
+  const [selectedClassGroup, setSelectedClassGroup] = useState(null);
 
   const selectedProgramName = useMemo(() => {
     const program = programs.find((item) => String(item.id) === String(selectedProgramId));
@@ -265,6 +265,8 @@ function Students() {
       ...prev,
       program_id: prev.program_id || selectedProgramId || '',
     }));
+    setSelectedClassGroup(null);
+    setAssignmentSearchQuery('');
     loadData();
   }, [selectedProgramId, canChooseProgram, filterClassGroup]);
 
@@ -284,21 +286,24 @@ function Students() {
     });
   }, [students, searchQuery, filterClassGroup]);
 
-  const assignmentStudents = useMemo(() => {
-    const q = String(assignmentSearchQuery || '').trim().toLowerCase();
+  const currentTurmaStudents = useMemo(() => {
+    if (!selectedClassGroup) return [];
+    return students.filter((s) => s.class_group === selectedClassGroup.slug);
+  }, [students, selectedClassGroup]);
+
+  const searchQueryResults = useMemo(() => {
+    if (!selectedClassGroup) return [];
+    const query = String(assignmentSearchQuery || '').trim().toLowerCase();
     return students.filter((s) => {
-      const name = String(s.full_name || '').toLowerCase();
-      const nis = String(s.nis_user || s.enrollment_code || '').toLowerCase();
-      const matchesText = !q || name.includes(q) || nis.includes(q);
-      const matchesTurma =
-        assignmentClassFilter === TURMA_FILTER_ALL
-          ? true
-          : assignmentClassFilter === '__none__'
-            ? !s.class_group
-            : s.class_group === assignmentClassFilter;
-      return matchesText && matchesTurma;
+      if (s.class_group === selectedClassGroup.slug) return false;
+      if (query) {
+        const name = String(s.full_name || '').toLowerCase();
+        const nis = String(s.nis_user || s.enrollment_code || '').toLowerCase();
+        return name.includes(query) || nis.includes(query);
+      }
+      return !s.class_group;
     });
-  }, [students, assignmentSearchQuery, assignmentClassFilter]);
+  }, [students, assignmentSearchQuery, selectedClassGroup]);
 
   const selectedReferralStudent = useMemo(
     () => students.find((student) => String(student.id) === String(selectedReferralId)),
@@ -477,6 +482,9 @@ function Students() {
     try {
       await classGroupService.remove(row.id);
       setSuccess('Turma removida com sucesso.');
+      if (selectedClassGroup?.id === row.id) {
+        setSelectedClassGroup(null);
+      }
       if (selectedProgramId && isUuid(selectedProgramId)) {
         const listRes = await classGroupService.list(selectedProgramId);
         setClassGroupsList(listRes.data || []);
@@ -633,7 +641,7 @@ function Students() {
     setSuccess('');
     try {
       await studentService.update(studentId, { class_group: turmaSlug || null });
-      setSuccess('Atribuição atualizada com sucesso.');
+      setSuccess('Atribuição de turma atualizada.');
       await loadData();
     } catch (err) {
       setError(err?.response?.data?.message || 'Falha ao atribuir usuário.');
@@ -883,7 +891,7 @@ function Students() {
                     </div>
                     <div>
                       <span className="text-slate-400 font-bold uppercase text-[9px] block">CPF</span>
-                      <strong className="text-slate-800 font-bold block mt-0.5">{selectedStudentForDetails.guardian_cpf || '—'}</strong>
+                      <strong className="text-slate-800 font-bold block mt-0.5">{selectedStudentForDetails.guardian_name ? selectedStudentForDetails.guardian_cpf || '—' : '—'}</strong>
                     </div>
                     <div>
                       <span className="text-slate-400 font-bold uppercase text-[9px] block">NIS</span>
@@ -1089,7 +1097,7 @@ function Students() {
 
                   <div className="space-y-1.5 md:col-span-2">
                     <label className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">Programas SCFV</label>
-                    <div className="flex flex-wrap gap-4 bg-slate-50/50 border border-slate-200/60 p-3 rounded-xl">
+                    <div className="flex flex-wrap gap-4 bg-slate-50/55 border border-slate-200/60 p-3 rounded-xl">
                       {REFERRAL_SCFV_PROGRAMS.map((p) => (
                         <label key={p.value} className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer select-none">
                           <input
@@ -2116,7 +2124,7 @@ function Students() {
           <CardHeader className="pb-3 border-b border-slate-100/50">
             <CardTitle className="text-base font-bold text-slate-900">Gerenciar Turmas da Unidade</CardTitle>
             <CardDescription className="text-xs text-slate-400">
-              As turmas valem para a unidade física selecionada no cabeçalho. Usuários vinculados a turmas aparecem no diário de chamadas.
+              As turmas valem para a unidade física selecionada no cabeçalho. Selecione uma turma para gerenciar seus integrantes.
             </CardDescription>
           </CardHeader>
 
@@ -2170,116 +2178,156 @@ function Students() {
 
                 {/* Turmas List */}
                 <div className="space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5">Turmas Ativas</h4>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5">Selecione uma Turma para Gerenciar os Alunos</h4>
                   {classGroupsList.length === 0 ? (
                     <p className="text-xs text-slate-400 font-semibold italic">Nenhuma turma cadastrada para esta unidade. Adicione uma no painel acima.</p>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {classGroupsList.map((t) => (
-                        <div key={t.id} className="flex justify-between items-center bg-white border border-slate-200/60 p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-                          <div>
-                            <strong className="text-sm font-bold text-slate-800">{t.name}</strong>
-                            <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider ml-1">({t.slug})</span>
-                            <div className="text-[11px] text-slate-500 font-semibold mt-1">
-                              {t.period ? (t.period === 'manha' ? '🌅 Manhã' : t.period === 'tarde' ? '🌤️ Tarde' : ` · ${t.period}`) : '—'}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveTurma(t)}
-                            disabled={turmaBusy}
-                            className="inline-flex items-center justify-center p-2 rounded-lg text-red-500 hover:bg-red-50 border border-slate-100 hover:border-red-100 transition-colors disabled:opacity-30 cursor-pointer"
-                            title="Excluir turma"
+                      {classGroupsList.map((t) => {
+                        const isSelected = selectedClassGroup?.id === t.id;
+                        return (
+                          <div
+                            key={t.id}
+                            onClick={() => setSelectedClassGroup(isSelected ? null : t)}
+                            className={cn(
+                              "flex justify-between items-center bg-white border p-4 rounded-xl shadow-sm hover:shadow-md transition-all cursor-pointer select-none relative overflow-hidden",
+                              isSelected
+                                ? "border-indigo-600 ring-2 ring-indigo-600/15"
+                                : "border-slate-200/60 hover:border-slate-300"
+                            )}
                           >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ))}
+                            <div>
+                              <strong className={cn("text-sm font-bold block", isSelected ? "text-indigo-600" : "text-slate-800")}>{t.name}</strong>
+                              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block mt-0.5">({t.slug})</span>
+                              <div className="text-[11px] text-slate-500 font-semibold mt-1">
+                                {t.period ? (t.period === 'manha' ? '🌅 Manhã' : t.period === 'tarde' ? '🌤️ Tarde' : ` · ${t.period}`) : '—'}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleRemoveTurma(t); }}
+                              disabled={turmaBusy}
+                              className="inline-flex items-center justify-center p-2 rounded-lg text-red-500 hover:bg-red-50 border border-slate-100 hover:border-red-100 transition-colors disabled:opacity-30 cursor-pointer"
+                              title="Excluir turma"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
 
                 {/* Assignment UI */}
-                <div className="border-t border-slate-100 pt-6 space-y-4">
-                  <div>
-                    <h4 className="text-sm font-extrabold text-slate-900 tracking-tight">Atribuição Rápida de Usuários</h4>
-                    <p className="text-xs text-slate-400 mt-0.5">Vincule rapidamente cada usuário a uma turma cadastrada na unidade.</p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-4 items-center bg-slate-50/50 p-4 rounded-xl border border-slate-100 shadow-sm">
-                    <div className="flex-1 min-w-[200px] relative">
-                      <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
-                      <input
-                        type="search"
-                        placeholder="Buscar usuário por nome ou NIS..."
-                        value={assignmentSearchQuery}
-                        onChange={(e) => setAssignmentSearchQuery(e.target.value)}
-                        className="w-full h-10 pl-10 pr-4 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all"
-                      />
-                    </div>
-
-                    <div className="w-full sm:w-auto min-w-[180px] space-y-1">
-                      <select
-                        id="assignment-filter-turma"
-                        value={assignmentClassFilter}
-                        onChange={(e) => setAssignmentClassFilter(e.target.value)}
-                        className="w-full h-10 px-3.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all cursor-pointer"
+                {selectedClassGroup ? (
+                  <div className="border-t border-slate-100 pt-6 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h4 className="text-sm font-extrabold text-slate-900 tracking-tight">
+                          Gerenciar Alunos da Turma: <span className="text-indigo-600">{selectedClassGroup.name}</span>
+                        </h4>
+                        <p className="text-xs text-slate-400 mt-0.5">Adicione ou remova integrantes desta turma usando os painéis abaixo.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedClassGroup(null); setAssignmentSearchQuery(''); }}
+                        className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer bg-slate-100 hover:bg-slate-200/80 px-2.5 py-1.5 rounded-lg transition-colors"
                       >
-                        <option value={TURMA_FILTER_ALL}>Todas as turmas</option>
-                        <option value="__none__">Sem turma</option>
-                        {classGroupsList.map((turma) => (
-                          <option key={turma.id} value={turma.slug}>
-                            {turma.name} {turma.period ? ` (${turma.period === 'manha' ? 'Manhã' : 'Tarde'})` : ''}
-                          </option>
-                        ))}
-                      </select>
+                        <X className="h-3.5 w-3.5" /> Fechar painel
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* Left Column: Current Members */}
+                      <div className="border border-slate-200/80 rounded-2xl p-5 bg-slate-50/20 space-y-3">
+                        <div className="flex justify-between items-center">
+                          <h5 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                            <Users className="h-3.5 w-3.5" />
+                            <span>Alunos Vinculados ({currentTurmaStudents.length})</span>
+                          </h5>
+                        </div>
+
+                        {currentTurmaStudents.length === 0 ? (
+                          <div className="text-center py-12 text-slate-400 font-medium text-xs bg-white border border-dashed border-slate-200 rounded-xl">
+                            Nenhum aluno cadastrado nesta turma ainda.
+                          </div>
+                        ) : (
+                          <div className="max-h-80 overflow-y-auto border border-slate-150 rounded-xl bg-white divide-y divide-slate-100 shadow-sm no-scrollbar">
+                            {currentTurmaStudents.map((s) => (
+                              <div key={s.id} className="flex justify-between items-center p-3 hover:bg-slate-50/50 transition-colors">
+                                <div>
+                                  <p className="text-xs font-bold text-slate-800">{s.full_name}</p>
+                                  <p className="text-[10px] text-slate-450 font-bold mt-0.5">
+                                    NIS: <MaskedValue value={s.nis_user || s.enrollment_code} />
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => assignStudentToTurma(s.id, null)}
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold text-red-500 hover:bg-red-50 border border-slate-200 hover:border-red-100 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <X className="h-3 w-3" /> Remover
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right Column: Search and Add New Members */}
+                      <div className="border border-slate-200/80 rounded-2xl p-5 bg-slate-50/20 space-y-3">
+                        <h5 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                          <UserPlus className="h-3.5 w-3.5" />
+                          <span>Adicionar Alunos à Turma</span>
+                        </h5>
+
+                        <div className="relative">
+                          <Search className="absolute left-3 top-3 h-3.5 w-3.5 text-slate-400" />
+                          <input
+                            type="search"
+                            placeholder="Buscar por nome ou NIS..."
+                            value={assignmentSearchQuery}
+                            onChange={(e) => setAssignmentSearchQuery(e.target.value)}
+                            className="w-full h-10 pl-9 pr-4 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all shadow-sm"
+                          />
+                        </div>
+
+                        {searchQueryResults.length === 0 ? (
+                          <div className="text-center py-12 text-slate-400 font-medium text-xs bg-white border border-dashed border-slate-200 rounded-xl">
+                            {assignmentSearchQuery
+                              ? 'Nenhum aluno encontrado para os termos digitados.'
+                              : 'Todos os alunos estão vinculados a alguma turma.'}
+                          </div>
+                        ) : (
+                          <div className="max-h-80 overflow-y-auto border border-slate-150 rounded-xl bg-white divide-y divide-slate-100 shadow-sm no-scrollbar">
+                            {searchQueryResults.map((s) => (
+                              <div key={s.id} className="flex justify-between items-center p-3 hover:bg-slate-50/50 transition-colors">
+                                <div>
+                                  <p className="text-xs font-bold text-slate-800">{s.full_name}</p>
+                                  <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                                    {s.class_group ? `Turma atual: ${turmaLabel(classGroupsList, s.class_group)}` : 'Sem turma vinculada'}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => assignStudentToTurma(s.id, selectedClassGroup.slug)}
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-105 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Plus className="h-3 w-3" /> Adicionar
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-
-                  {classGroupsList.length === 0 ? (
-                    <p className="text-xs text-slate-400 font-semibold italic">Nenhuma turma disponível para realizar atribuições.</p>
-                  ) : students.length === 0 ? (
-                    <p className="text-xs text-slate-400 font-semibold italic">Nenhum usuário cadastrado nesta unidade.</p>
-                  ) : assignmentStudents.length === 0 ? (
-                    <p className="text-xs text-slate-400 font-semibold italic">Nenhum usuário corresponde aos filtros aplicados.</p>
-                  ) : (
-                    <div className="overflow-x-auto w-full border border-slate-100 rounded-xl shadow-sm bg-white">
-                      <table className="w-full border-collapse text-left text-xs">
-                        <thead className="bg-slate-50 border-b border-slate-100">
-                          <tr>
-                            <th className="px-5 py-3.5 font-bold uppercase tracking-wider text-slate-400">Nome</th>
-                            <th className="px-5 py-3.5 font-bold uppercase tracking-wider text-slate-400">NIS</th>
-                            <th className="px-5 py-3.5 font-bold uppercase tracking-wider text-slate-400">Turma Atribuída</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {assignmentStudents.map((s) => (
-                            <tr key={s.id} className="hover:bg-slate-50/30 transition-colors">
-                              <td className="px-5 py-4 font-bold text-slate-800">{s.full_name}</td>
-                              <td className="px-5 py-4 text-slate-500 font-medium">
-                                <MaskedValue value={s.nis_user || s.enrollment_code} />
-                              </td>
-                              <td className="px-5 py-4">
-                                <select
-                                  value={s.class_group || ''}
-                                  onChange={(e) => assignStudentToTurma(s.id, e.target.value || null)}
-                                  className="w-full max-w-[240px] h-9 px-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all cursor-pointer"
-                                >
-                                  <option value="">Sem turma</option>
-                                  {classGroupsList.map((turma) => (
-                                    <option key={turma.id} value={turma.slug}>
-                                      {turma.name} {turma.period ? ` (${turma.period === 'manha' ? '🌅 Manhã' : '🌤️ Tarde'})` : ''}
-                                    </option>
-                                  ))}
-                                </select>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
+                ) : (
+                  <div className="text-center py-12 text-slate-400 font-medium text-xs border border-dashed border-slate-200 rounded-2xl bg-slate-50/20">
+                    Selecione uma turma ativa acima para carregar o painel de atribuição de alunos.
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
