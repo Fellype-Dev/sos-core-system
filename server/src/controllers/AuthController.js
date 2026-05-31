@@ -3,6 +3,7 @@ const User = require('../models/User');
 const { supabase } = require('../config/database');
 const JwtUtils = require('../utils/jwtUtils');
 const ApiResponse = require('../utils/ApiResponse');
+const AuditLog = require('../models/AuditLog');
 
 /** Unifica vínculos user_programs → programs (sem duplicar por id). */
 function programsFromUserLinks(userPrograms) {
@@ -131,6 +132,12 @@ class AuthController {
 
       delete user.password_hash;
 
+      await AuditLog.log({
+        userId: user.id,
+        action: 'LOGIN',
+        details: { email: user.email, program_id: activeProgramId },
+      });
+
       return ApiResponse.success(
         res,
         {
@@ -229,6 +236,12 @@ class AuthController {
       };
 
       const token = JwtUtils.generateToken(tokenPayload);
+
+      await AuditLog.log({
+        userId: req.userId,
+        action: 'SWITCH_PROGRAM',
+        details: { program_id },
+      });
 
       return ApiResponse.success(
         res,

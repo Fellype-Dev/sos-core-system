@@ -1,13 +1,136 @@
-@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,600;0,8..60,700;1,8..60,400&display=swap');
+@layer theme, base, components, utilities;
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,600;0,8..60,700;1,8..60,400&display=swap');
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme {
+  --color-border: hsl(var(--tw-border));
+  --color-input: hsl(var(--tw-input));
+  --color-ring: hsl(var(--tw-ring));
+  --color-background: hsl(var(--tw-background));
+  --color-foreground: hsl(var(--tw-foreground));
+  
+  --color-primary: hsl(var(--tw-primary));
+  --color-primary-foreground: hsl(var(--tw-primary-foreground));
+  
+  --color-secondary: hsl(var(--tw-secondary));
+  --color-secondary-foreground: hsl(var(--tw-secondary-foreground));
+  
+  --color-destructive: hsl(var(--tw-destructive));
+  --color-destructive-foreground: hsl(var(--tw-destructive-foreground));
+  
+  --color-muted: hsl(var(--tw-muted));
+  --color-muted-foreground: hsl(var(--tw-muted-foreground));
+  
+  --color-accent: hsl(var(--tw-accent));
+  --color-accent-foreground: hsl(var(--tw-accent-foreground));
+  
+  --color-popover: hsl(var(--tw-popover));
+  --color-popover-foreground: hsl(var(--tw-popover-foreground));
+  
+  --color-card: hsl(var(--tw-card));
+  --color-card-foreground: hsl(var(--tw-card-foreground));
+  
+  --radius-lg: var(--tw-radius);
+  --radius-md: calc(var(--tw-radius) - 2px);
+  --radius-sm: calc(var(--tw-radius) - 4px);
+}
+
+@layer base {
+  :root {
+    --tw-background: 210 40% 98%;      /* #f8fafc */
+    --tw-foreground: 222.2 84% 4.9%;     /* #0f172a */
+
+    --tw-card: 0 0% 100%;                /* #ffffff */
+    --tw-card-foreground: 222.2 84% 4.9%;
+
+    --tw-popover: 0 0% 100%;
+    --tw-popover-foreground: 222.2 84% 4.9%;
+
+    --tw-primary: 239 41% 41%;           /* #3e4095 */
+    --tw-primary-foreground: 210 40% 98%;
+
+    --tw-secondary: 92 55% 46%;          /* #72b736 */
+    --tw-secondary-foreground: 222.2 47.4% 11.2%;
+
+    --tw-muted: 210 40% 96.1%;
+    --tw-muted-foreground: 215.4 16.3% 46.9%; /* #64748b */
+
+    --tw-accent: 210 40% 96.1%;
+    --tw-accent-foreground: 222.2 47.4% 11.2%;
+
+    --tw-destructive: 0 84.2% 60.2%;     /* #ef4444 */
+    --tw-destructive-foreground: 210 40% 98%;
+
+    --tw-border: 214.3 31.8% 91.4%;      /* #e2e8f0 */
+    --tw-input: 214.3 31.8% 91.4%;
+    --tw-ring: 239 41% 41%;
+
+    --tw-radius: 12px;
+  }
+
+  .dark {
+    --tw-background: 222.2 84% 4.9%;
+    --tw-foreground: 210 40% 98%;
+
+    --tw-card: 222.2 84% 4.9%;
+    --tw-card-foreground: 210 40% 98%;
+
+    --tw-popover: 222.2 84% 4.9%;
+    --tw-popover-foreground: 210 40% 98%;
+
+    --tw-primary: 210 40% 98%;
+    --tw-primary-foreground: 222.2 47.4% 11.2%;
+
+    --tw-secondary: 217.2 32.6% 17.5%;
+    --tw-secondary-foreground: 210 40% 98%;
+
+    --tw-muted: 217.2 32.6% 17.5%;
+    --tw-muted-foreground: 215 20.2% 65.1%;
+
+    --tw-accent: 217.2 32.6% 17.5%;
+    --tw-accent-foreground: 210 40% 98%;
+
+    --tw-destructive: 0 62.8% 30.6%;
+    --tw-destructive-foreground: 210 40% 98%;
+
+    --tw-border: 217.2 32.6% 17.5%;
+    --tw-input: 217.2 32.6% 17.5%;
+    --tw-ring: 212.7 26.8% 83.9%;
+  }
+}
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: var(--text);
+    background: var(--surface-muted);
+    min-height: 100vh;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
 }
 
 :root {
-  --font-sans: 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
   --font-display: 'Source Serif 4', 'Georgia', serif;
 
   --brand: #3e4095;
@@ -41,22 +164,34 @@
   --accent: var(--brand);
 }
 
-body {
-  font-family: var(--font-sans);
-  color: var(--text);
-  background: var(--surface-muted);
-  min-height: 100vh;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(0.5deg);
+  }
 }
 
-a {
-  color: inherit;
+@keyframes float-reverse {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(8px) rotate(-0.5deg);
+  }
 }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float-reverse 7s ease-in-out infinite;
+  animation-delay: 1.5s;
+}
+
+.animate-float-slow {
+  animation: float 8s ease-in-out infinite;
+  animation-delay: 0.5s;
 }

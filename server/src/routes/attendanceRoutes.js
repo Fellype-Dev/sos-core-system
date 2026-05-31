@@ -8,6 +8,7 @@ router.use(authMiddleware);
 router.use(authorizeRoles('admin', 'sede', 'coordenador'));
 
 router.get('/sessions', (req, res, next) => AttendanceController.listSessions(req, res, next));
+router.get('/sessions/bulk-detail', (req, res, next) => AttendanceController.bulkSessionDetail(req, res, next));
 router.get('/sessions/:id', (req, res, next) => AttendanceController.sessionDetail(req, res, next));
 router.get('/', (req, res, next) => AttendanceController.show(req, res, next));
 router.post('/', (req, res, next) => AttendanceController.store(req, res, next));

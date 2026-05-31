@@ -1,6 +1,7 @@
 const Attendance = require('../models/Attendance');
 const ApiResponse = require('../utils/ApiResponse');
 const { resolveScopedProgramId, isUuid } = require('../utils/programContext');
+const AuditLog = require('../models/AuditLog');
 
 class AttendanceController {
   resolveProgramId(req) {
@@ -114,6 +115,17 @@ class AttendanceController {
         records,
       });
 
+      await AuditLog.log({
+        userId: req.userId,
+        action: 'SAVE_ATTENDANCE',
+        details: {
+          attendance_date,
+          class_group,
+          period,
+          records_count: records.length,
+        },
+      });
+
       return ApiResponse.success(
         res,
         {
@@ -172,6 +184,41 @@ class AttendanceController {
       }
 
       return ApiResponse.success(res, detail, 'Detalhe da chamada carregado com sucesso');
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async bulkSessionDetail(req, res, next) {
+    try {
+      const { attendance_date, start_date, end_date, class_group, period } = req.query;
+
+      const programId = this.resolveProgramId(req);
+      const access = this.validateProgramAccess(req, programId);
+      if (!access.ok) {
+        return ApiResponse.error(res, access.message, 403);
+      }
+
+      if (programId && !isUuid(programId)) {
+        return ApiResponse.error(res, 'Identificador de unidade invalido', 400);
+      }
+
+      const details = await Attendance.getBulkSessionDetails({
+        programId,
+        attendanceDate: attendance_date,
+        startDate: start_date,
+        endDate: end_date,
+        classGroup: class_group,
+        period,
+      });
+
+      await AuditLog.log({
+        userId: req.userId,
+        action: 'EXPORT_REPORT',
+        details: { attendance_date, start_date, end_date, class_group, period },
+      });
+
+      return ApiResponse.success(res, details, 'Detalhes das chamadas carregados com sucesso');
     } catch (error) {
       return next(error);
     }
