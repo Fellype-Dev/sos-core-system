@@ -33,6 +33,7 @@ create table if not exists class_groups (
     slug text not null,
     name text not null,
     sort_order int not null default 0,
+    period text,
     created_at timestamptz not null default now(),
     unique (program_id, slug)
 );
