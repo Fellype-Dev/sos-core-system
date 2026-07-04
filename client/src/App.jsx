@@ -2,6 +2,8 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Login from './pages/Login';
 import Home from './pages/Home';
 import Students from './pages/Students';
+import StudentFormPage from './pages/students/StudentFormPage';
+import TurmasPage from './pages/students/TurmasPage';
 import UserManagement from './pages/UserManagement';
 import Attendance from './pages/Attendance';
 import Reports from './pages/Reports';
@@ -34,6 +36,30 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Students />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/usuarios/novo"
+              element={
+                <ProtectedRoute>
+                  <StudentFormPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/usuarios/:id/editar"
+              element={
+                <ProtectedRoute>
+                  <StudentFormPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/turmas"
+              element={
+                <ProtectedRoute>
+                  <TurmasPage />
                 </ProtectedRoute>
               }
             />
