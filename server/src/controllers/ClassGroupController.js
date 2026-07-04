@@ -43,7 +43,7 @@ class ClassGroupController {
 
   async store(req, res, next) {
     try {
-      const { program_id, name, slug: requestedSlug, sort_order = 0 } = req.body;
+      const { program_id, name, slug: requestedSlug, sort_order = 0, period } = req.body;
 
       if (!program_id || !isUuid(program_id)) {
         return ApiResponse.error(res, 'Campo obrigatorio: program_id', 400);
@@ -68,6 +68,7 @@ class ClassGroupController {
         slug,
         name: String(name).trim(),
         sort_order: Number.isFinite(Number(sort_order)) ? Number(sort_order) : 0,
+        period,
       });
 
       return ApiResponse.success(res, created, 'Turma criada com sucesso', 201);
@@ -93,10 +94,11 @@ class ClassGroupController {
         return ApiResponse.error(res, access.message, 403);
       }
 
-      const { name, sort_order } = req.body;
+      const { name, sort_order, period } = req.body;
       const updated = await ClassGroup.update(id, {
         name: name !== undefined ? name : undefined,
         sort_order: sort_order !== undefined ? sort_order : undefined,
+        period: period !== undefined ? period : undefined,
       });
 
       return ApiResponse.success(res, updated, 'Turma atualizada com sucesso');

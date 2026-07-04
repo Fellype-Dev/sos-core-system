@@ -5,6 +5,10 @@ const envPath = fs.existsSync(path.join(__dirname, '.env'))
   : path.join(__dirname, '../.env');
 
 require('dotenv').config({ path: envPath });
+
+const validateEnv = require('./src/config/validateEnv');
+validateEnv();
+
 const app = require('./src/app');
 
 const PORT = process.env.PORT || 3000;

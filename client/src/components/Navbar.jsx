@@ -88,8 +88,19 @@ function Navbar() {
             >
               Usuários
             </NavLink>
-            <NavLink 
-              to="/chamada" 
+            <NavLink
+              to="/turmas"
+              className={({ isActive }) => cn(
+                "px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200 whitespace-nowrap",
+                isActive
+                  ? "bg-white text-indigo-600 shadow-sm border border-slate-200/10"
+                  : "text-slate-600 hover:text-slate-950 hover:bg-slate-50/50"
+              )}
+            >
+              Turmas
+            </NavLink>
+            <NavLink
+              to="/chamada"
               className={({ isActive }) => cn(
                 "px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200 whitespace-nowrap",
                 isActive 
