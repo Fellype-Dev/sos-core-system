@@ -1,19 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  PieChart, Pie, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
+  PieChart, Pie, BarChart, Bar, ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
 } from 'recharts';
-import { FileSpreadsheet, FileText, Sparkles, Filter, Calendar, CheckCircle, ShieldAlert, Clock, Building, BarChart3, PieChart as PieIcon, Info } from 'lucide-react';
+import { FileSpreadsheet, FileText, Sparkles, Filter, CheckCircle, ShieldAlert, Clock, Building, BarChart3, PieChart as PieIcon, Info, RefreshCw, Activity, LayoutGrid, Users, TrendingUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas-pro';
+import { jsPDF } from 'jspdf';
 import useAuth from '../hooks/useAuth';
 import attendanceService from '../services/attendanceService';
 import classGroupService from '../services/classGroupService';
 import studentService from '../services/studentService';
-import { cn } from '../lib/utils';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import DashboardFilters from '../components/DashboardFilters';
+import DeltaBadge from '../components/DeltaBadge';
+import {
+  PERIOD_PRESETS, getPresetRange, getPreviousRange, sessionInRange,
+  aggregateMetrics, buildTrend, bucketLabel,
+} from '../lib/analytics';
+import { loadImageDataURL, drawReportHeader, drawReportFooter, SOS_LOGO_SRC } from '../lib/pdfBranding';
 
 const COLORS = {
   primary: '#3e4095',
@@ -74,7 +80,7 @@ function downloadWorkbook(filename, sheets) {
 
   sheets.forEach(({ name, rows }) => {
     const worksheet = XLSX.utils.aoa_to_sheet(rows);
-    
+
     // Auto-fit column widths
     if (rows.length > 0) {
       const colWidths = rows[0].map((_, colIndex) => {
@@ -106,7 +112,9 @@ function getPeriodLabel(period) {
 }
 
 function Reports() {
-  const { selectedProgramId } = useAuth();
+  const { availablePrograms, selectedProgramId } = useAuth();
+
+  // --- Configurador de exportação XLSX (escopo: unidade ativa) ---
   const [reportType, setReportType] = useState('class_groups');
   const [classGroups, setClassGroups] = useState([]);
   const [dateFilter, setDateFilter] = useState('');
@@ -124,19 +132,18 @@ function Reports() {
 
   const previewRef = useRef(null);
 
-  // States para a prévia de gráficos no PDF (dados consolidados da unidade)
-  const [programAnalytics, setProgramAnalytics] = useState([]);
+  // --- Prévia analítica / PDF (filtros por período + unidade) ---
+  const [programData, setProgramData] = useState([]);
   const [chartsLoading, setChartsLoading] = useState(false);
-
-  const currentProgram = useMemo(() => {
-    return selectedProgramId ? { id: selectedProgramId } : null;
-  }, [selectedProgramId]);
+  const [periodPreset, setPeriodPreset] = useState('year');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const [unitFilter, setUnitFilter] = useState('all');
+  const [logo, setLogo] = useState(null);
 
   const reportInfo = useMemo(() => REPORT_TYPES[reportType] || { label: '', description: '' }, [reportType]);
 
-  const needsDate = useMemo(() => {
-    return reportType === 'attendance_detail';
-  }, [reportType]);
+  const needsDate = useMemo(() => reportType === 'attendance_detail', [reportType]);
 
   const hasValidDate = useMemo(() => {
     if (useDateRange) {
@@ -145,7 +152,16 @@ function Reports() {
     return !!dateFilter;
   }, [useDateRange, dateFilter, startDateFilter, endDateFilter]);
 
-  // Carrega turmas da unidade
+  // Carrega a logo do SOS uma única vez para embutir no PDF
+  useEffect(() => {
+    let active = true;
+    loadImageDataURL(SOS_LOGO_SRC)
+      .then((result) => { if (active) setLogo(result); })
+      .catch(() => { if (active) setLogo(null); });
+    return () => { active = false; };
+  }, []);
+
+  // Carrega turmas da unidade ativa (para a exportação XLSX)
   useEffect(() => {
     let active = true;
     const loadTurmas = async () => {
@@ -168,94 +184,44 @@ function Reports() {
     };
   }, [selectedProgramId]);
 
-  // Carrega dados agregados para os gráficos de prévia em PDF
+  // Carrega dados de todas as unidades para a prévia dos gráficos
   useEffect(() => {
     let active = true;
+    const extractData = (response) => response?.data?.data || response?.data || response || [];
+
     const loadAggregates = async () => {
-      if (!selectedProgramId || !isUuid(selectedProgramId)) {
-        setProgramAnalytics([]);
+      const programsToFetch = Array.isArray(availablePrograms) && availablePrograms.length > 0
+        ? availablePrograms
+        : selectedProgramId
+          ? [{ id: selectedProgramId, name: 'Unidade ativa' }]
+          : [];
+
+      if (programsToFetch.length === 0) {
+        setProgramData([]);
         return;
       }
+
       setChartsLoading(true);
       try {
-        const [studentsRes, sessionsRes, classGroupsRes] = await Promise.all([
-          studentService.getAll({ program_id: selectedProgramId }),
-          attendanceService.getSessions({ program_id: selectedProgramId }),
-          classGroupService.list(selectedProgramId),
-        ]);
-
-        if (!active) return;
-
-        const listStudents = studentsRes.data || [];
-        const listSessions = sessionsRes.data?.data || sessionsRes.data || [];
-        const listClassGroups = classGroupsRes.data || [];
-
-        // Métricas de frequência
-        const totalStudents = listStudents.length;
-        let presentCount = 0;
-        let absentCount = 0;
-        listSessions.forEach((s) => {
-          if (s.present_count !== undefined) presentCount += s.present_count;
-          if (s.absent_count !== undefined) absentCount += s.absent_count;
-        });
-
-        const totalRecords = presentCount + absentCount;
-        const attendancePercentage = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
-
-        // Alunos por Turma
-        const studentsByTurma = {};
-        listStudents.forEach((student) => {
-          const t = student.class_group || 'Sem turma';
-          studentsByTurma[t] = (studentsByTurma[t] || 0) + 1;
-        });
-        const turmaData = Object.entries(studentsByTurma).map(([name, value]) => ({ name, value }));
-
-        // Alunos por Período
-        const studentsByPeriod = {};
-        listClassGroups.forEach((g) => {
-          const p = g.period || 'Não definido';
-          studentsByPeriod[p] = (studentsByPeriod[p] || 0) + (g.students_count || 0);
-        });
-        const periodData = Object.entries(studentsByPeriod).map(([name, value]) => ({
-          name: name === 'manha' ? 'Manhã' : name === 'tarde' ? 'Tarde' : name,
-          value,
-        }));
-
-        // Frequência/Faltas por Turma
-        const turmaStats = {};
-        listSessions.forEach((session) => {
-          const t = session.class_group || 'Sem turma';
-          if (!turmaStats[t]) turmaStats[t] = { present: 0, absent: 0 };
-          turmaStats[t].present += session.present_count || 0;
-          turmaStats[t].absent += session.absent_count || 0;
-        });
-        const turmaAttendanceData = Object.entries(turmaStats).map(([tName, stats]) => ({
-          name: tName,
-          present: stats.present,
-          absent: stats.absent,
-          percentage:
-            stats.present + stats.absent > 0
-              ? Math.round((stats.present / (stats.present + stats.absent)) * 100)
-              : 0,
-        }));
-
-        setProgramAnalytics([
-          {
-            analytics: {
-              totalStudents,
-              attendancePercentage,
-              presentCount,
-              absentCount,
-              totalRecords,
-              turmaData,
-              periodData,
-              turmaAttendanceData,
-            },
-          },
-        ]);
+        const results = await Promise.all(
+          programsToFetch.map(async (program) => {
+            const [studentsRes, sessionsRes, classGroupsRes] = await Promise.all([
+              studentService.getAll({ program_id: program.id }),
+              attendanceService.getSessions({ program_id: program.id }),
+              classGroupService.list(program.id),
+            ]);
+            return {
+              program,
+              students: extractData(studentsRes),
+              sessions: extractData(sessionsRes),
+              classGroups: extractData(classGroupsRes),
+            };
+          })
+        );
+        if (active) setProgramData(results);
       } catch (err) {
         console.error('Erro ao montar gráficos de prévia:', err);
-        setProgramAnalytics([]);
+        if (active) setProgramData([]);
       } finally {
         if (active) setChartsLoading(false);
       }
@@ -265,20 +231,103 @@ function Reports() {
     return () => {
       active = false;
     };
-  }, [selectedProgramId]);
+  }, [availablePrograms, selectedProgramId]);
 
-  const selectedAnalytics = useMemo(() => programAnalytics[0] || null, [programAnalytics]);
+  // ---------- Derivações da prévia analítica ----------
 
-  const totalStudentsAll = selectedAnalytics?.analytics?.totalStudents || 0;
-  const totalPresentAll = selectedAnalytics?.analytics?.presentCount || 0;
-  const totalAbsentAll = selectedAnalytics?.analytics?.absentCount || 0;
-  const totalRecordsAll = totalPresentAll + totalAbsentAll;
-  const attendanceAll = selectedAnalytics?.analytics?.attendancePercentage || 0;
+  const range = useMemo(
+    () => getPresetRange(periodPreset, customStart, customEnd),
+    [periodPreset, customStart, customEnd]
+  );
+  const previousRange = useMemo(() => getPreviousRange(range), [range]);
 
-  const studentsByProgramChart = useMemo(() => {
-    if (!selectedProgramId) return [];
-    return [{ name: 'Esta Unidade', value: totalStudentsAll }];
-  }, [selectedProgramId, totalStudentsAll]);
+  const selectedUnits = useMemo(() => {
+    if (unitFilter === 'all') return programData;
+    return programData.filter((row) => String(row.program.id) === String(unitFilter));
+  }, [programData, unitFilter]);
+
+  const rangeLabel = useMemo(() => {
+    const preset = PERIOD_PRESETS.find((p) => p.id === periodPreset);
+    if (periodPreset === 'custom') {
+      if (range.start && range.end) {
+        return `${formatDateBR(range.start)} até ${formatDateBR(range.end)}`;
+      }
+      return 'Selecione as datas';
+    }
+    return preset?.label || '';
+  }, [periodPreset, range]);
+
+  const unitLabel = useMemo(() => {
+    if (unitFilter === 'all') return 'Todas as unidades';
+    const found = availablePrograms.find((p) => String(p.id) === String(unitFilter));
+    return found?.name || 'Unidade';
+  }, [unitFilter, availablePrograms]);
+
+  const current = useMemo(() => aggregateMetrics(selectedUnits, range), [selectedUnits, range]);
+  const previous = useMemo(
+    () => (previousRange ? aggregateMetrics(selectedUnits, previousRange) : null),
+    [selectedUnits, previousRange]
+  );
+  const attendanceDelta = previous ? current.attendancePercentage - previous.attendancePercentage : null;
+  const recordsDelta = previous && previous.totalRecords > 0
+    ? Math.round(((current.totalRecords - previous.totalRecords) / previous.totalRecords) * 100)
+    : null;
+
+  const filteredSessions = useMemo(() => {
+    const all = [];
+    selectedUnits.forEach((row) => {
+      (row.sessions || []).forEach((session) => {
+        if (sessionInRange(session, range)) all.push(session);
+      });
+    });
+    return all;
+  }, [selectedUnits, range]);
+
+  const trendData = useMemo(() => buildTrend(filteredSessions, range), [filteredSessions, range]);
+
+  const turmaData = useMemo(() => {
+    const byTurma = {};
+    selectedUnits.forEach((row) => {
+      (row.students || []).forEach((student) => {
+        const t = student.class_group || 'Sem turma';
+        byTurma[t] = (byTurma[t] || 0) + 1;
+      });
+    });
+    return Object.entries(byTurma).map(([name, value]) => ({ name, value }));
+  }, [selectedUnits]);
+
+  const periodData = useMemo(() => {
+    const byPeriod = {};
+    selectedUnits.forEach((row) => {
+      (row.classGroups || []).forEach((g) => {
+        const p = g.period || 'Não definido';
+        if (!(p in byPeriod)) byPeriod[p] = 0;
+      });
+      (row.students || []).forEach((student) => {
+        const g = (row.classGroups || []).find((cg) => cg.slug === student.class_group);
+        const p = g?.period || 'Não definido';
+        byPeriod[p] = (byPeriod[p] || 0) + 1;
+      });
+    });
+    return Object.entries(byPeriod).map(([name, value]) => ({
+      name: name === 'manha' ? 'Manhã' : name === 'tarde' ? 'Tarde' : name,
+      value,
+    }));
+  }, [selectedUnits]);
+
+  const unitComparison = useMemo(() => {
+    return programData.map((row) => {
+      const metrics = aggregateMetrics([row], range);
+      return {
+        name: row.program?.name || 'Unidade',
+        Frequência: metrics.attendancePercentage,
+        Cadastros: metrics.totalStudents,
+      };
+    });
+  }, [programData, range]);
+
+  const showComparison = programData.length > 1 && unitFilter === 'all';
+  const hasPreviewData = programData.length > 0;
 
   const buildFileName = (prefix) => {
     const timestamp = new Date().toISOString().slice(0, 10);
@@ -490,49 +539,80 @@ function Reports() {
     }
   };
 
-  // Exportação em formato de PDF (Dashboard consolidado da unidade em A4)
+  // Exportação do dashboard consolidado em PDF (branded, paginado em A4 retrato)
   const exportDashboardPdf = async () => {
     if (!previewRef.current) return;
     setPdfLoading(true);
     setError('');
     try {
       const element = previewRef.current;
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true });
-      const imgData = canvas.toDataURL('image/png');
-
-      const pdf = new jsPDF({
-        orientation: 'landscape',
-        unit: 'mm',
-        format: 'a4',
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        onclone: (clonedDoc) => {
+          clonedDoc.querySelectorAll('svg').forEach((svg) => {
+            const bbox = svg.getBoundingClientRect();
+            svg.setAttribute('width', bbox.width || svg.clientWidth || 300);
+            svg.setAttribute('height', bbox.height || svg.clientHeight || 200);
+            svg.style.width = null;
+            svg.style.height = null;
+          });
+        },
       });
 
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
       const margin = 10;
-      const contentWidth = pdfWidth - margin * 2;
-      const contentHeight = (canvas.height * contentWidth) / canvas.width;
+      const imgWidth = pageWidth - margin * 2;
 
-      pdf.setFillColor(15, 23, 42); // slate-900 background dark
-      pdf.rect(0, 0, pdfWidth, 20, 'F');
-      
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(14);
-      pdf.text(`RELATORIO DE MONITORAMENTO DE FREQUENCIA - ${currentProgram?.name || '—'}`, margin, 13);
+      const headerOpts = {
+        logo,
+        title: 'Relatório de Frequência',
+        subtitle: unitLabel,
+        metaLines: [
+          `Período: ${rangeLabel}`,
+          `Exportado em: ${new Date().toLocaleString('pt-BR')}`,
+        ],
+      };
 
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(8);
-      pdf.setTextColor(148, 163, 184);
-      const exportTime = new Date().toLocaleString('pt-BR');
-      pdf.text(`Exportado em: ${exportTime}`, pdfWidth - margin - 50, 13);
+      // Área útil por página (entre o cabeçalho e o rodapé)
+      const headerBottom = 30;
+      const footerTop = pageHeight - 12;
+      const availMm = footerTop - headerBottom;
 
-      pdf.addImage(imgData, 'PNG', margin, 25, contentWidth, Math.min(contentHeight, pdfHeight - 35));
-      pdf.save(`relatorio_frequencia_${selectedProgramId.slice(0, 8)}.pdf`);
+      const pxPerMm = canvas.width / imgWidth;
+      const stripPx = Math.floor(availMm * pxPerMm);
+      const pageCount = Math.max(1, Math.ceil(canvas.height / stripPx));
+
+      let sy = 0;
+      let page = 0;
+      while (sy < canvas.height) {
+        const sliceHeightPx = Math.min(stripPx, canvas.height - sy);
+
+        const strip = document.createElement('canvas');
+        strip.width = canvas.width;
+        strip.height = sliceHeightPx;
+        const sctx = strip.getContext('2d');
+        sctx.fillStyle = '#ffffff';
+        sctx.fillRect(0, 0, strip.width, strip.height);
+        sctx.drawImage(canvas, 0, sy, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
+
+        if (page > 0) pdf.addPage();
+        const startY = drawReportHeader(pdf, headerOpts);
+        pdf.addImage(strip.toDataURL('image/png'), 'PNG', margin, startY, imgWidth, sliceHeightPx / pxPerMm);
+        drawReportFooter(pdf, { pageNumber: page + 1, pageCount });
+
+        sy += sliceHeightPx;
+        page += 1;
+      }
+
+      pdf.save(`relatorio_frequencia_${unitFilter === 'all' ? 'consolidado' : selectedProgramId.slice(0, 8)}.pdf`);
       setSuccess('Relatório PDF exportado com sucesso.');
     } catch (err) {
       console.error('Erro ao gerar PDF:', err);
-      setError('Falha ao exportar o relatório consolidado em PDF.');
+      setError(`Falha ao exportar o relatório consolidado em PDF: ${err.message || err}`);
     } finally {
       setPdfLoading(false);
     }
@@ -579,9 +659,9 @@ function Reports() {
             <CardHeader className="pb-3 border-b border-slate-100/50">
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-indigo-600" />
-                <CardTitle className="text-base font-bold text-slate-900">Configurar Exportação</CardTitle>
+                <CardTitle className="text-base font-bold text-slate-900">Configurar Exportação (Excel)</CardTitle>
               </div>
-              <CardDescription className="text-xs text-slate-400">Escolha os filtros apropriados para o relatório.</CardDescription>
+              <CardDescription className="text-xs text-slate-400">Escolha os filtros apropriados para a planilha. Escopo: unidade ativa.</CardDescription>
             </CardHeader>
             <CardContent className="p-6 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -715,24 +795,12 @@ function Reports() {
                   <FileSpreadsheet className="h-4 w-4" />
                   {loading ? 'Processando...' : 'Exportar Excel (XLSX)'}
                 </Button>
-                
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-10 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                  onClick={exportDashboardPdf}
-                  disabled={pdfLoading || chartsLoading || programAnalytics.length === 0}
-                  title={chartsLoading ? 'Carregando dados para o PDF.' : 'Exportar resumo em PDF.'}
-                >
-                  <FileText className="h-4 w-4" />
-                  {pdfLoading ? 'Gerando...' : 'Exportar PDF'}
-                </Button>
-                
+
                 <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5 ml-2.5 sm:ml-auto">
                   <Info className="h-3.5 w-3.5 text-indigo-400" />
                   {reportType === 'class_groups'
                     ? 'Este relatório exporta a listagem completa das turmas.'
-                    : 'A exportação é restrita à unidade ativa selecionada no cabeçalho.'}
+                    : 'A exportação Excel é restrita à unidade ativa selecionada no cabeçalho.'}
                 </span>
               </div>
 
@@ -749,14 +817,10 @@ function Reports() {
           <Card className="border-slate-100 shadow-xl shadow-slate-100/40 bg-white rounded-2xl overflow-hidden lg:col-span-1 border-l-4 border-l-emerald-500">
             <CardHeader className="pb-3 border-b border-slate-100/50">
               <CardTitle className="text-base font-bold text-slate-900">Configuração de Saída</CardTitle>
-              <CardDescription className="text-xs text-slate-400">Verifique os dados da exportação ativa.</CardDescription>
+              <CardDescription className="text-xs text-slate-400">Verifique os dados da exportação Excel ativa.</CardDescription>
             </CardHeader>
             <CardContent className="p-6">
               <ul className="divide-y divide-slate-100/70 text-xs font-bold">
-                <li className="py-2.5 flex justify-between gap-4">
-                  <span className="text-slate-400 uppercase text-[9px] tracking-wider mt-0.5">Unidade ativa</span>
-                  <span className="text-slate-800 text-right">{currentProgram?.name || '—'}</span>
-                </li>
                 <li className="py-2.5 flex justify-between gap-4">
                   <span className="text-slate-400 uppercase text-[9px] tracking-wider mt-0.5">Relatório</span>
                   <span className="text-slate-800 text-right">{reportInfo.label}</span>
@@ -783,126 +847,197 @@ function Reports() {
         </div>
       )}
 
-      {/* Visual charts preview for PDF download (Hidden from screen view, only visible as preview layout ref) */}
+      {/* Relatório PDF consolidado com filtros de período + unidade */}
       {selectedProgramId && (
-        <Card className="border-slate-100 shadow-xl shadow-slate-100/40 bg-white rounded-2xl overflow-hidden mt-6">
-          <CardHeader className="pb-3 border-b border-slate-100/50">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-indigo-600" />
-              <CardTitle className="text-base font-bold text-slate-900">Prévia do Relatório PDF</CardTitle>
-            </div>
-            <CardDescription className="text-xs text-slate-400">Esta prévia mostra os gráficos consolidados que serão impressos no PDF.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-6">
-            {chartsLoading ? (
-              <div className="flex flex-col items-center justify-center py-12 space-y-3">
-                <div className="animate-spin rounded-full h-7 w-7 border-t-2 border-indigo-600" />
-                <span className="text-xs text-slate-400 font-bold">Carregando dados dos gráficos...</span>
-              </div>
-            ) : programAnalytics.length === 0 ? (
-              <div className="text-center py-12 text-slate-400 text-xs italic">
-                Nenhum dado consolidado disponível nesta unidade para renderizar gráficos.
-              </div>
-            ) : (
-              <div ref={previewRef} className="bg-white p-6 rounded-2xl border border-slate-150 shadow-sm space-y-8">
-                {/* Stats row */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-100/80">
-                    <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider block">Total de usuários</span>
-                    <strong className="text-2xl font-extrabold text-slate-900 block mt-1">{totalStudentsAll}</strong>
+        <div className="space-y-4">
+          <DashboardFilters
+            periodPreset={periodPreset}
+            setPeriodPreset={setPeriodPreset}
+            customStart={customStart}
+            setCustomStart={setCustomStart}
+            customEnd={customEnd}
+            setCustomEnd={setCustomEnd}
+            unitFilter={unitFilter}
+            setUnitFilter={setUnitFilter}
+            availablePrograms={availablePrograms}
+          />
+
+          <Card className="border-slate-100 shadow-xl shadow-slate-100/40 bg-white rounded-2xl overflow-hidden">
+            <CardHeader className="pb-3 border-b border-slate-100/50">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-indigo-600" />
+                    <CardTitle className="text-base font-bold text-slate-900">Relatório Consolidado (PDF)</CardTitle>
                   </div>
-                  <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100/80">
-                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Frequência geral</span>
-                    <strong className="text-2xl font-extrabold text-slate-900 block mt-1">{attendanceAll}%</strong>
-                  </div>
-                  <div className="p-4 rounded-xl bg-violet-50 border border-violet-100/80">
-                    <span className="text-[10px] font-bold text-violet-700 uppercase tracking-wider block">Registros de presença</span>
-                    <strong className="text-2xl font-extrabold text-slate-900 block mt-1">{totalRecordsAll}</strong>
-                  </div>
+                  <CardDescription className="text-xs text-slate-400">
+                    Prévia dos gráficos que serão impressos no PDF · {unitLabel} · {rangeLabel}
+                  </CardDescription>
                 </div>
-
-                {/* Charts Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100/60">
-                  {studentsByProgramChart.length > 0 && (
-                    <div className="border border-slate-100 rounded-xl p-4 bg-white shadow-sm">
-                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-1.5">
-                        <Building className="h-4 w-4 text-indigo-500" />
-                        Usuários por Unidade
-                      </h4>
-                      <ResponsiveContainer width="100%" height={260}>
-                        <BarChart data={studentsByProgramChart}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
-                          <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                          <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                          <Tooltip />
-                          <Bar dataKey="value" name="Usuários" fill={COLORS.primary} radius={[4, 4, 0, 0]} maxBarSize={40} />
-                        </BarChart>
-                      </ResponsiveContainer>
+                <Button
+                  type="button"
+                  className="h-10 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1.5 cursor-pointer shadow-lg shadow-indigo-600/10"
+                  onClick={exportDashboardPdf}
+                  disabled={pdfLoading || chartsLoading || !hasPreviewData}
+                  title={chartsLoading ? 'Carregando dados para o PDF.' : 'Exportar relatório em PDF.'}
+                >
+                  <FileText className="h-4 w-4" />
+                  {pdfLoading ? 'Gerando PDF...' : 'Exportar PDF'}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6">
+              {chartsLoading ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                  <div className="animate-spin rounded-full h-7 w-7 border-t-2 border-indigo-600" />
+                  <span className="text-xs text-slate-400 font-bold">Carregando dados dos gráficos...</span>
+                </div>
+              ) : !hasPreviewData ? (
+                <div className="text-center py-12 text-slate-400 text-xs italic">
+                  Nenhum dado consolidado disponível para renderizar gráficos.
+                </div>
+              ) : (
+                <div ref={previewRef} id="pdf-preview-container" className="bg-white p-6 rounded-2xl border border-slate-150 shadow-sm space-y-8">
+                  {/* Stats row */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-100/80">
+                      <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider flex items-center gap-1"><Users className="h-3 w-3" /> Total de usuários</span>
+                      <strong className="text-2xl font-extrabold text-slate-900 block mt-1">{current.totalStudents}</strong>
                     </div>
-                  )}
+                    <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100/80">
+                      <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Frequência no período</span>
+                      <span className="flex items-center gap-2 mt-1">
+                        <strong className="text-2xl font-extrabold text-slate-900 block">{current.attendancePercentage}%</strong>
+                        <DeltaBadge value={attendanceDelta} suffix="pp" label="Frequência" />
+                      </span>
+                    </div>
+                    <div className="p-4 rounded-xl bg-violet-50 border border-violet-100/80">
+                      <span className="text-[10px] font-bold text-violet-700 uppercase tracking-wider flex items-center gap-1"><BarChart3 className="h-3 w-3" /> Registros de presença</span>
+                      <span className="flex items-center gap-2 mt-1">
+                        <strong className="text-2xl font-extrabold text-slate-900 block">{current.totalRecords}</strong>
+                        <DeltaBadge value={recordsDelta} suffix="%" label="Registros" />
+                      </span>
+                    </div>
+                  </div>
 
-                  {selectedAnalytics?.analytics?.turmaData?.length > 0 && (
-                    <div className="border border-slate-100 rounded-xl p-4 bg-white shadow-sm">
-                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-1.5">
-                        <BarChart3 className="h-4 w-4 text-indigo-500" />
-                        Usuários por Turma
-                      </h4>
-                      <ResponsiveContainer width="100%" height={260}>
-                        <PieChart>
-                          <Pie data={selectedAnalytics.analytics.turmaData} dataKey="value" nameKey="name" outerRadius={80} label={{ fontSize: 10 }}>
-                            {selectedAnalytics.analytics.turmaData.map((entry, index) => (
-                              <Cell key={entry.name} fill={PALETTE[index % PALETTE.length]} />
-                            ))}
-                          </Pie>
+                  {/* Evolução no tempo */}
+                  <div className="border border-slate-100 rounded-xl p-4 bg-white shadow-sm">
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                      <Activity className="h-4 w-4 text-indigo-500" />
+                      Evolução da Frequência
+                    </h4>
+                    {trendData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={280}>
+                        <ComposedChart data={trendData}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                          <YAxis yAxisId="left" allowDecimals={false} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                          <YAxis yAxisId="right" orientation="right" domain={[0, 100]} unit="%" tick={{ fontSize: 10, fill: '#3e4095' }} axisLine={false} tickLine={false} />
                           <Tooltip />
                           <Legend wrapperStyle={{ fontSize: 10 }} />
-                        </PieChart>
+                          <Bar yAxisId="left" dataKey="Presenças" fill={COLORS.success} radius={[4, 4, 0, 0]} maxBarSize={38} stackId="a" />
+                          <Bar yAxisId="left" dataKey="Faltas" fill={COLORS.danger} radius={[4, 4, 0, 0]} maxBarSize={38} stackId="a" />
+                          <Line yAxisId="right" type="monotone" dataKey="Frequência" stroke={COLORS.primary} strokeWidth={2.5} dot={{ r: 2.5, fill: COLORS.primary }} unit="%" />
+                        </ComposedChart>
                       </ResponsiveContainer>
-                    </div>
-                  )}
+                    ) : (
+                      <p className="text-center py-10 text-slate-400 text-xs italic">Nenhum registro de chamada neste período.</p>
+                    )}
+                  </div>
 
-                  {selectedAnalytics?.analytics?.periodData?.length > 0 && (
+                  {/* Comparativo entre unidades */}
+                  {showComparison && (
                     <div className="border border-slate-100 rounded-xl p-4 bg-white shadow-sm">
                       <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-1.5">
-                        <Clock className="h-4 w-4 text-indigo-500" />
-                        Usuários por Período
+                        <LayoutGrid className="h-4 w-4 text-indigo-500" />
+                        Comparativo entre Unidades
                       </h4>
                       <ResponsiveContainer width="100%" height={260}>
-                        <BarChart data={selectedAnalytics.analytics.periodData}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
+                        <BarChart data={unitComparison}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                           <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                          <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                          <Tooltip />
-                          <Bar dataKey="value" name="Usuários" fill={COLORS.info} radius={[4, 4, 0, 0]} maxBarSize={40} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  )}
-
-                  {selectedAnalytics?.analytics?.turmaAttendanceData?.length > 0 && (
-                    <div className="border border-slate-100 rounded-xl p-4 bg-white shadow-sm">
-                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-1.5">
-                        <PieIcon className="h-4 w-4 text-indigo-500" />
-                        Presenças e Faltas por Turma
-                      </h4>
-                      <ResponsiveContainer width="100%" height={260}>
-                        <BarChart data={selectedAnalytics.analytics.turmaAttendanceData}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
-                          <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                          <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                          <YAxis yAxisId="left" allowDecimals={false} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                          <YAxis yAxisId="right" orientation="right" domain={[0, 100]} unit="%" tick={{ fontSize: 10, fill: '#72b736' }} axisLine={false} tickLine={false} />
                           <Tooltip />
                           <Legend wrapperStyle={{ fontSize: 10 }} />
-                          <Bar dataKey="present" name="Presenças" fill={COLORS.success} radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="absent" name="Faltas" fill={COLORS.danger} radius={[4, 4, 0, 0]} />
+                          <Bar yAxisId="left" dataKey="Cadastros" fill={COLORS.primary} radius={[4, 4, 0, 0]} maxBarSize={40} />
+                          <Bar yAxisId="right" dataKey="Frequência" fill={COLORS.success} radius={[4, 4, 0, 0]} maxBarSize={40} unit="%" />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
                   )}
+
+                  {/* Distribuições */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {current.totalRecords > 0 && (
+                      <div className="border border-slate-100 rounded-xl p-4 bg-white shadow-sm">
+                        <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                          <PieIcon className="h-4 w-4 text-indigo-500" />
+                          Status de Frequência
+                        </h4>
+                        <ResponsiveContainer width="100%" height={240}>
+                          <PieChart>
+                            <Pie
+                              data={[
+                                { name: 'Presente', value: current.presentCount },
+                                { name: 'Ausente', value: current.absentCount },
+                              ]}
+                              dataKey="value"
+                              outerRadius={75}
+                              label={({ name, value }) => `${name}: ${value}`}
+                            >
+                              <Cell fill={COLORS.success} />
+                              <Cell fill={COLORS.danger} />
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+
+                    {turmaData.length > 0 && (
+                      <div className="border border-slate-100 rounded-xl p-4 bg-white shadow-sm">
+                        <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                          <BarChart3 className="h-4 w-4 text-indigo-500" />
+                          Usuários por Turma
+                        </h4>
+                        <ResponsiveContainer width="100%" height={240}>
+                          <PieChart>
+                            <Pie data={turmaData} dataKey="value" nameKey="name" outerRadius={75} label={({ name, value }) => `${name}: ${value}`}>
+                              {turmaData.map((entry, index) => (
+                                <Cell key={entry.name} fill={PALETTE[index % PALETTE.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                            <Legend wrapperStyle={{ fontSize: 10 }} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+
+                    {periodData.length > 0 && (
+                      <div className="border border-slate-100 rounded-xl p-4 bg-white shadow-sm">
+                        <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                          <Clock className="h-4 w-4 text-indigo-500" />
+                          Usuários por Período
+                        </h4>
+                        <ResponsiveContainer width="100%" height={240}>
+                          <BarChart data={periodData}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                            <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                            <Tooltip />
+                            <Bar dataKey="value" name="Usuários" fill={COLORS.info} radius={[4, 4, 0, 0]} maxBarSize={40} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );
