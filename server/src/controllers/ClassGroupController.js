@@ -2,6 +2,13 @@ const ClassGroup = require('../models/ClassGroup');
 const ApiResponse = require('../utils/ApiResponse');
 const { isUuid } = require('../utils/programContext');
 const { slugify } = require('../utils/slugify');
+const { normalizeWeekdays } = require('../utils/classGroup');
+
+function normalizeAgeRange(value) {
+  if (value === undefined) return undefined;
+  const s = String(value || '').trim();
+  return s ? s.slice(0, 40) : null;
+}
 
 function validateProgramAccess(req, programId) {
   if (!programId) {
@@ -43,7 +50,7 @@ class ClassGroupController {
 
   async store(req, res, next) {
     try {
-      const { program_id, name, slug: requestedSlug, sort_order = 0, period } = req.body;
+      const { program_id, name, slug: requestedSlug, sort_order = 0, period, weekdays, age_range } = req.body;
 
       if (!program_id || !isUuid(program_id)) {
         return ApiResponse.error(res, 'Campo obrigatorio: program_id', 400);
@@ -69,6 +76,8 @@ class ClassGroupController {
         name: String(name).trim(),
         sort_order: Number.isFinite(Number(sort_order)) ? Number(sort_order) : 0,
         period,
+        weekdays: normalizeWeekdays(weekdays) || [],
+        age_range: normalizeAgeRange(age_range) ?? null,
       });
 
       return ApiResponse.success(res, created, 'Turma criada com sucesso', 201);
@@ -94,11 +103,13 @@ class ClassGroupController {
         return ApiResponse.error(res, access.message, 403);
       }
 
-      const { name, sort_order, period } = req.body;
+      const { name, sort_order, period, weekdays, age_range } = req.body;
       const updated = await ClassGroup.update(id, {
         name: name !== undefined ? name : undefined,
         sort_order: sort_order !== undefined ? sort_order : undefined,
         period: period !== undefined ? period : undefined,
+        weekdays: normalizeWeekdays(weekdays),
+        age_range: normalizeAgeRange(age_range),
       });
 
       return ApiResponse.success(res, updated, 'Turma atualizada com sucesso');
