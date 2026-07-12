@@ -6,7 +6,13 @@ import MaskedValue from '../../components/MaskedValue';
 import Avatar from '../../components/Avatar';
 import { cn } from '../../lib/utils';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/card';
-import { Search, UserPlus, Users, Plus, Trash2, X, Info, CheckCircle, AlertCircle, GraduationCap } from 'lucide-react';
+import { Search, UserPlus, Users, Plus, Trash2, X, Info, CheckCircle, AlertCircle, GraduationCap, CalendarDays } from 'lucide-react';
+import { WEEK_DAYS } from './studentForm';
+
+function weekdaysLabel(weekdays) {
+  if (!Array.isArray(weekdays) || weekdays.length === 0) return null;
+  return WEEK_DAYS.filter((d) => weekdays.includes(d.value)).map((d) => d.label).join(' · ');
+}
 
 function isUuid(value) {
   return (
@@ -31,6 +37,8 @@ function TurmasPage() {
   const [success, setSuccess] = useState('');
   const [newTurmaName, setNewTurmaName] = useState('');
   const [newTurmaPeriod, setNewTurmaPeriod] = useState('manha');
+  const [newTurmaDays, setNewTurmaDays] = useState([]);
+  const [newTurmaAgeRange, setNewTurmaAgeRange] = useState('');
   const [turmaBusy, setTurmaBusy] = useState(false);
   const [selectedClassGroup, setSelectedClassGroup] = useState(null);
   const [assignmentSearchQuery, setAssignmentSearchQuery] = useState('');
@@ -117,9 +125,17 @@ function TurmasPage() {
     setError('');
     setSuccess('');
     try {
-      await classGroupService.create({ program_id: selectedProgramId, name, period: newTurmaPeriod });
+      await classGroupService.create({
+        program_id: selectedProgramId,
+        name,
+        period: newTurmaPeriod,
+        weekdays: newTurmaDays,
+        age_range: newTurmaAgeRange.trim() || null,
+      });
       setNewTurmaName('');
       setNewTurmaPeriod('manha');
+      setNewTurmaDays([]);
+      setNewTurmaAgeRange('');
       setSuccess('Turma cadastrada com sucesso.');
       await loadGroups();
       await loadStudents();
@@ -243,6 +259,48 @@ function TurmasPage() {
                       <option value="tarde">Tarde</option>
                     </select>
                   </div>
+                  <div className="w-full sm:w-auto min-w-[140px] space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">Faixa Etária / Público</label>
+                    <input
+                      type="text"
+                      value={newTurmaAgeRange}
+                      onChange={(e) => setNewTurmaAgeRange(e.target.value)}
+                      placeholder="Ex.: 6 a 8 anos, 60+"
+                      maxLength={40}
+                      disabled={turmaBusy}
+                      className="w-full h-10 px-3.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all"
+                    />
+                  </div>
+                  <div className="w-full space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">Dias da Semana</label>
+                    <div className="flex flex-wrap gap-2">
+                      {WEEK_DAYS.map((day) => {
+                        const active = newTurmaDays.includes(day.value);
+                        return (
+                          <button
+                            key={day.value}
+                            type="button"
+                            disabled={turmaBusy}
+                            onClick={() =>
+                              setNewTurmaDays((prev) =>
+                                prev.includes(day.value)
+                                  ? prev.filter((d) => d !== day.value)
+                                  : [...prev, day.value]
+                              )
+                            }
+                            className={cn(
+                              'h-9 px-3.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer select-none',
+                              active
+                                ? 'bg-indigo-600 text-white border-indigo-600'
+                                : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                            )}
+                          >
+                            {day.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   <button
                     type="button"
                     onClick={handleAddTurma}
@@ -285,7 +343,7 @@ function TurmasPage() {
 
                           <div className="min-w-0 flex-1">
                             <strong className={cn("text-sm font-bold block truncate", isSelected ? "text-indigo-600" : "text-slate-800")}>{t.name}</strong>
-                            <div className="flex items-center gap-2 mt-1">
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
                               <span className={cn(
                                 "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold border",
                                 t.period === 'manha'
@@ -296,11 +354,22 @@ function TurmasPage() {
                               )}>
                                 {t.period === 'manha' ? 'Manhã' : t.period === 'tarde' ? 'Tarde' : t.period || '—'}
                               </span>
+                              {t.age_range && (
+                                <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold border bg-violet-50 text-violet-700 border-violet-100">
+                                  {t.age_range}
+                                </span>
+                              )}
                               <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400">
                                 <Users className="h-3 w-3" />
                                 {count} {count === 1 ? 'aluno' : 'alunos'}
                               </span>
                             </div>
+                            {weekdaysLabel(t.weekdays) && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 mt-1">
+                                <CalendarDays className="h-3 w-3 shrink-0" />
+                                {weekdaysLabel(t.weekdays)}
+                              </span>
+                            )}
                           </div>
 
                           <button
