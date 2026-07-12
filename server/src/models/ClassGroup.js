@@ -1,6 +1,6 @@
 const { supabase } = require('../config/database');
 
-const SELECT = 'id, program_id, slug, name, sort_order, period, created_at';
+const SELECT = 'id, program_id, slug, name, sort_order, period, weekdays, age_range, created_at';
 
 class ClassGroup {
   static async findByProgram(programId) {
@@ -59,10 +59,10 @@ class ClassGroup {
     return count || 0;
   }
 
-  static async create({ program_id, slug, name, sort_order = 0, period }) {
+  static async create({ program_id, slug, name, sort_order = 0, period, weekdays = [], age_range = null }) {
     const { data, error } = await supabase
       .from('class_groups')
-      .insert({ program_id, slug, name, sort_order, period })
+      .insert({ program_id, slug, name, sort_order, period, weekdays, age_range })
       .select('id')
       .single();
 
@@ -70,11 +70,13 @@ class ClassGroup {
     return this.findById(data.id);
   }
 
-  static async update(id, { name, sort_order, period }) {
+  static async update(id, { name, sort_order, period, weekdays, age_range }) {
     const updates = {};
     if (name !== undefined) updates.name = name;
     if (sort_order !== undefined) updates.sort_order = sort_order;
     if (period !== undefined) updates.period = period;
+    if (weekdays !== undefined) updates.weekdays = weekdays;
+    if (age_range !== undefined) updates.age_range = age_range;
     if (Object.keys(updates).length === 0) return this.findById(id);
 
     const { error } = await supabase.from('class_groups').update(updates).eq('id', id);
