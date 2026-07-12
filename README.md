@@ -1,4 +1,4 @@
-# SOS Core System
+# SOS - Serviço de Obras Socias
 
 Sistema web com frontend React e backend Node.js/Express integrado ao Supabase.
 
