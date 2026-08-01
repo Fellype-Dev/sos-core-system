@@ -151,11 +151,16 @@ function Attendance() {
         );
 
         setRecords(
-          students.map((student) => ({
-            id: student.id,
-            name: student.full_name,
-            status: recordsByStudent.get(student.id) || null,
-          }))
+          students
+            // Inativos saem da lista de presenca, mas continuam visiveis nas datas em que ja
+            // possuem registro, para nao esconder o historico.
+            .filter((student) => student.is_active !== false || recordsByStudent.has(student.id))
+            .map((student) => ({
+              id: student.id,
+              name: student.full_name,
+              status: recordsByStudent.get(student.id) || null,
+              isInactive: student.is_active === false,
+            }))
         );
       } catch (err) {
         setError(err?.response?.data?.message || 'Falha ao carregar usuarios.');
@@ -187,7 +192,7 @@ function Attendance() {
       const response = await attendanceService.getSessions(params);
       setHistorySessions(response.data?.data || response.data || []);
     } catch (err) {
-      setError(err?.response?.data?.message || 'Falha ao carregar histórico de chamadas.');
+      setError(err?.response?.data?.message || 'Falha ao carregar histórico de listas de presença.');
       setHistorySessions([]);
     } finally {
       setHistoryLoading(false);
@@ -207,7 +212,7 @@ function Attendance() {
       setSelectedHistoryDetail(detail);
       setHistoryDraftRecords(cloneAttendanceRecords(detail));
     } catch (err) {
-      setError(err?.response?.data?.message || 'Falha ao carregar detalhes da chamada.');
+      setError(err?.response?.data?.message || 'Falha ao carregar detalhes da lista de presença.');
     } finally {
       setHistoryDetailLoading(false);
     }
@@ -286,7 +291,7 @@ function Attendance() {
 
   const saveAttendance = async () => {
     if (!selectedProgramId) {
-      setError('Selecione uma unidade para salvar a chamada.');
+      setError('Selecione uma unidade para salvar a lista de presença.');
       return;
     }
 
@@ -331,7 +336,7 @@ function Attendance() {
             </div>
             <div>
               <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Registro de Frequência</h1>
-              <p className="text-slate-500 text-sm mt-0.5">Lançamento diário e histórico de chamadas das turmas ativas.</p>
+              <p className="text-slate-500 text-sm mt-0.5">Lançamento diário e histórico das listas de presença das turmas ativas.</p>
             </div>
           </div>
           <div className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-3.5 py-1.5 rounded-full border border-indigo-100 text-xs font-bold w-fit self-start sm:self-auto shrink-0">
@@ -353,7 +358,7 @@ function Attendance() {
           type="button"
           onClick={() => setActiveTab('marking')}
         >
-          Lançar Chamada
+          Lançar Lista de Presença
         </button>
         <button
           className={cn(
@@ -365,7 +370,7 @@ function Attendance() {
           type="button"
           onClick={() => setActiveTab('history')}
         >
-          Histórico de Chamadas
+          Histórico de Listas de Presença
         </button>
       </div>
 
@@ -383,7 +388,7 @@ function Attendance() {
       )}
       {!selectedProgramId && (
         <div className="p-4 rounded-xl bg-amber-50 border border-amber-100 text-sm text-amber-800 font-semibold">
-          Nenhuma unidade ativa. Escolha uma unidade no seletor do topo para lançar ou ver chamadas.
+          Nenhuma unidade ativa. Escolha uma unidade no seletor do topo para lançar ou ver listas de presença.
         </div>
       )}
 
@@ -432,7 +437,7 @@ function Attendance() {
             {/* History Sessions Table Card */}
             <Card className="border-slate-100 shadow-xl shadow-slate-100/40 bg-white rounded-2xl overflow-hidden">
               <CardHeader className="pb-3 border-b border-slate-100/50">
-                <CardTitle className="text-base font-bold text-slate-900">Lista de Chamadas Salvas</CardTitle>
+                <CardTitle className="text-base font-bold text-slate-900">Listas de Presença Salvas</CardTitle>
                 <CardDescription className="text-xs text-slate-400">Histórico de frequência gravado para a unidade ativa.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
@@ -443,7 +448,7 @@ function Attendance() {
                   </div>
                 ) : historySessions.length === 0 ? (
                   <div className="text-center py-12 text-slate-400 font-semibold text-xs">
-                    Nenhuma chamada registrada encontrada para os filtros aplicados.
+                    Nenhuma lista de presença registrada encontrada para os filtros aplicados.
                   </div>
                 ) : (
                   <div className="overflow-x-auto w-full">
@@ -506,7 +511,7 @@ function Attendance() {
                   {/* Modal Header */}
                   <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
                     <div>
-                      <h3 className="text-base font-extrabold text-slate-900">Histórico de Chamada</h3>
+                      <h3 className="text-base font-extrabold text-slate-900">Detalhes da Lista de Presença</h3>
                       <p className="text-xs text-slate-400 font-semibold mt-1">
                         {formatDateBR(selectedHistorySession.attendance_date)} · {turmaLabel(turmaOptions, selectedHistorySession.class_group)} ·{' '}
                         {selectedHistorySession.period === 'manha' ? 'Manhã' : selectedHistorySession.period === 'tarde' ? 'Tarde' : selectedHistorySession.period || '—'}
@@ -666,7 +671,7 @@ function Attendance() {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Lançar Chamada Toolbar Filters */}
+            {/* Lançar Lista de Presença - filtros */}
             <div className="flex flex-wrap items-end gap-4 p-5 rounded-2xl bg-slate-50 border border-slate-200/60 shadow-sm">
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-0.5">Turma</label>
@@ -705,14 +710,14 @@ function Attendance() {
                 disabled={saving || loading} 
                 className="h-10 text-xs font-bold cursor-pointer bg-indigo-600 hover:bg-indigo-700"
               >
-                {saving ? 'Gravando...' : 'Salvar Chamada'}
+                {saving ? 'Gravando...' : 'Salvar Lista de Presença'}
               </Button>
             </div>
 
             {/* Attendance Marking Table */}
             <Card className="border-slate-100 shadow-xl shadow-slate-100/40 bg-white rounded-2xl overflow-hidden">
               <CardHeader className="pb-3 border-b border-slate-100/50">
-                <CardTitle className="text-base font-bold text-slate-900">Listagem de Chamada</CardTitle>
+                <CardTitle className="text-base font-bold text-slate-900">Lista de Presença</CardTitle>
                 <CardDescription className="text-xs text-slate-400">Marque a presença ou falta dos participantes correspondentes.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
@@ -738,7 +743,14 @@ function Attendance() {
                       <tbody className="divide-y divide-slate-100/70">
                         {records.map((record) => (
                           <tr key={record.id} className="hover:bg-slate-50/30 transition-colors">
-                            <td className="px-5 py-4 font-bold text-slate-800">{record.name}</td>
+                            <td className="px-5 py-4 font-bold text-slate-800">
+                              {record.name}
+                              {record.isInactive && (
+                                <span className="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500 border border-slate-200">
+                                  Inativo
+                                </span>
+                              )}
+                            </td>
                             <td className="px-5 py-4 text-center">
                               <div className="flex justify-center">
                                 <input

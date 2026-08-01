@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const ApiResponse = require('../utils/ApiResponse');
+const { ALL_ROLES } = require('../utils/roles');
 
 class UserController {
   async index(req, res, next) {
@@ -32,6 +33,10 @@ class UserController {
         return ApiResponse.error(res, 'Campos obrigatorios: full_name, email, password, role', 400);
       }
 
+      if (!ALL_ROLES.includes(role)) {
+        return ApiResponse.error(res, `Perfil invalido. Use um destes: ${ALL_ROLES.join(', ')}`, 400);
+      }
+
       const createdUser = await User.create({
         full_name,
         email,
@@ -52,6 +57,10 @@ class UserController {
       const current = await User.findById(id);
       if (!current) {
         return ApiResponse.notFound(res, 'Usuario nao encontrado');
+      }
+
+      if (req.body.role !== undefined && !ALL_ROLES.includes(req.body.role)) {
+        return ApiResponse.error(res, `Perfil invalido. Use um destes: ${ALL_ROLES.join(', ')}`, 400);
       }
 
       const updatedUser = await User.update(id, req.body);

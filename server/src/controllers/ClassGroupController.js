@@ -143,7 +143,7 @@ class ClassGroupController {
       if (studentCount > 0 || sessionCount > 0) {
         return ApiResponse.error(
           res,
-          'Nao e possivel excluir: existem usuarios ou registros de chamada usando esta turma',
+          'Nao e possivel excluir: existem usuarios ou listas de presenca usando esta turma',
           409
         );
       }

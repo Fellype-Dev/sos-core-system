@@ -3,9 +3,10 @@ const router = express.Router();
 const AttendanceController = require('../controllers/AttendanceController');
 const authMiddleware = require('../middleware/auth');
 const authorizeRoles = require('../middleware/authorize');
+const { ALL_ROLES } = require('../utils/roles');
 
 router.use(authMiddleware);
-router.use(authorizeRoles('admin', 'sede', 'coordenador'));
+router.use(authorizeRoles(...ALL_ROLES));
 
 router.get('/sessions', (req, res, next) => AttendanceController.listSessions(req, res, next));
 router.get('/sessions/bulk-detail', (req, res, next) => AttendanceController.bulkSessionDetail(req, res, next));

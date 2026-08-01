@@ -35,7 +35,10 @@ function Navbar() {
 
   const roleLabel = {
     admin: 'Sede',
+    sede: 'Sede',
     coordenador: 'Unidade',
+    tecnico: 'Unidade',
+    assistente: 'Unidade',
   }[user?.role] || user?.role || 'Usuário';
 
   const singleProgram = availablePrograms?.length === 1 ? availablePrograms[0] : null;
@@ -108,7 +111,7 @@ function Navbar() {
                   : "text-slate-600 hover:text-slate-950 hover:bg-slate-50/50"
               )}
             >
-              Chamada
+              Lista de Presença
             </NavLink>
             <NavLink 
               to="/relatorios" 

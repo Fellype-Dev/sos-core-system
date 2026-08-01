@@ -6,9 +6,10 @@ import {
 import useAuth from '../../hooks/useAuth';
 import studentService from '../../services/studentService';
 import programService from '../../services/programService';
+import classGroupService from '../../services/classGroupService';
 import { Card, CardContent } from '../../components/ui/card';
 import {
-  initialForm, buildStudentPayload, mapStudentToForm,
+  initialForm, buildStudentPayload, mapStudentToForm, hasSiscMismatch,
   COLOR_OPTIONS, SCHOOL_SHIFT_OPTIONS, CRAS_STATUS_OPTIONS, WEEK_DAYS, SCFV_SHIFTS,
 } from './studentForm';
 
@@ -29,6 +30,8 @@ function StudentFormPage() {
   const [form, setForm] = useState(() => ({ ...initialForm(), program_id: selectedProgramId || '' }));
   const [step, setStep] = useState(0);
   const [programs, setPrograms] = useState([]);
+  // Turmas da unidade: alimentam o seletor de grupo do SISC.
+  const [classGroups, setClassGroups] = useState([]);
   const [loading, setLoading] = useState(editing);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -41,6 +44,22 @@ function StudentFormPage() {
       .catch(() => { if (!cancelled) setPrograms([]); });
     return () => { cancelled = true; };
   }, []);
+
+  // As turmas seguem a unidade escolhida no formulário (admin) ou a unidade ativa.
+  const formProgramId = form.program_id || selectedProgramId;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!formProgramId) {
+      setClassGroups([]);
+      return undefined;
+    }
+    classGroupService
+      .list(formProgramId)
+      .then((res) => { if (!cancelled) setClassGroups(res.data || []); })
+      .catch(() => { if (!cancelled) setClassGroups([]); });
+    return () => { cancelled = true; };
+  }, [formProgramId]);
 
   useEffect(() => {
     if (!editing) return;
@@ -67,6 +86,19 @@ function StudentFormPage() {
     if (!program) return selectedProgramId || 'Unidade selecionada';
     return program.location ? `${program.name} · ${program.location}` : program.name;
   }, [programs, selectedProgramId]);
+
+  const turmaLabelBySlug = (slug) => {
+    if (!slug) return null;
+    return classGroups.find((g) => g.slug === slug)?.name || slug;
+  };
+
+  // Grupo do SISC salvo que não existe (mais) como turma da unidade: mantém a opção
+  // no seletor para o valor não se perder ao salvar.
+  const siscGroupOutsideList = Boolean(
+    form.sisc_group && !classGroups.some((g) => g.slug === form.sisc_group)
+  );
+
+  const siscMismatch = hasSiscMismatch(form);
 
   const onChange = (event) => {
     const { name, value, type, checked } = event.target;
@@ -104,6 +136,32 @@ function StudentFormPage() {
       const list = Array.isArray(prev.family_members) ? [...prev.family_members] : [];
       list.splice(index, 1);
       return { ...prev, family_members: list };
+    });
+  };
+
+  const addAuthorizedPickup = () => {
+    setForm((prev) => ({
+      ...prev,
+      authorized_pickups: [
+        ...(Array.isArray(prev.authorized_pickups) ? prev.authorized_pickups : []),
+        { name: '', document: '', phone: '', relationship: '', notes: '' },
+      ],
+    }));
+  };
+
+  const updateAuthorizedPickup = (index, field, value) => {
+    setForm((prev) => {
+      const list = Array.isArray(prev.authorized_pickups) ? [...prev.authorized_pickups] : [];
+      list[index] = { ...(list[index] || {}), [field]: value };
+      return { ...prev, authorized_pickups: list };
+    });
+  };
+
+  const removeAuthorizedPickup = (index) => {
+    setForm((prev) => {
+      const list = Array.isArray(prev.authorized_pickups) ? [...prev.authorized_pickups] : [];
+      list.splice(index, 1);
+      return { ...prev, authorized_pickups: list };
     });
   };
 
@@ -466,6 +524,54 @@ function StudentFormPage() {
                     </div>
                   </div>
                 </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-600 border-b border-slate-100 pb-2">Pessoas Autorizadas a Retirar</h3>
+                  <p className="text-xs font-semibold text-slate-500 -mt-1">
+                    Além do responsável principal, cadastre quem está autorizado a retirar o assistido da unidade —
+                    incluindo pessoas que não são da família. Confira sempre o documento na retirada.
+                  </p>
+                  <div className="space-y-2.5">
+                    {(form.authorized_pickups || []).length === 0 && (
+                      <p className="text-xs font-semibold text-slate-400 italic">Nenhuma pessoa autorizada além do responsável principal.</p>
+                    )}
+                    {(form.authorized_pickups || []).map((person, index) => (
+                      <div key={`${index}-pickup`} className="border border-slate-200/60 bg-slate-50/20 p-4 rounded-xl space-y-2.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 items-end">
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Nome</span>
+                            <input className="w-full h-9 px-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all" type="text" placeholder="Nome completo" value={person?.name || ''} onChange={(e) => updateAuthorizedPickup(index, 'name', e.target.value)} />
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Documento</span>
+                            <input className="w-full h-9 px-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all" type="text" placeholder="RG ou CPF" value={person?.document || ''} onChange={(e) => updateAuthorizedPickup(index, 'document', e.target.value)} />
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Telefone</span>
+                            <input className="w-full h-9 px-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all" type="text" placeholder="(00) 00000-0000" value={person?.phone || ''} onChange={(e) => updateAuthorizedPickup(index, 'phone', e.target.value)} />
+                          </div>
+                          <div className="space-y-1 flex gap-2 items-center">
+                            <div className="flex-1 space-y-1">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Vínculo</span>
+                              <input className="w-full h-9 px-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all" type="text" placeholder="Ex: Vizinha, Tia" value={person?.relationship || ''} onChange={(e) => updateAuthorizedPickup(index, 'relationship', e.target.value)} />
+                            </div>
+                            <button type="button" className="h-9 px-3 hover:bg-red-50 hover:text-red-600 rounded-lg border border-slate-200 hover:border-red-100 text-slate-400 transition-all flex items-center justify-center cursor-pointer mt-5" onClick={() => removeAuthorizedPickup(index)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Observação</span>
+                          <input className="w-full h-9 px-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all" type="text" placeholder="Ex: retira somente às sextas, autorização entregue em 10/02" value={person?.notes || ''} onChange={(e) => updateAuthorizedPickup(index, 'notes', e.target.value)} />
+                        </div>
+                      </div>
+                    ))}
+                    <button type="button" className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-950 transition-colors shadow-sm cursor-pointer" onClick={addAuthorizedPickup}>
+                      <Plus className="h-3.5 w-3.5" />
+                      Adicionar Pessoa Autorizada
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -555,6 +661,46 @@ function StudentFormPage() {
                       <textarea id="advisor_notes" name="advisor_notes" placeholder="Evolução, comportamento, anotações de acompanhamento..." value={form.advisor_notes} onChange={onChange} rows={4} className="w-full px-3 py-2 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all resize-y min-h-[5.5rem]" />
                     </div>
                   </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-600 border-b border-slate-100 pb-2">Registro no SISC</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="space-y-1.5">
+                      <label htmlFor="sisc_link_date" className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">Data de Vinculação no SISC</label>
+                      <input id="sisc_link_date" type="date" name="sisc_link_date" value={form.sisc_link_date} onChange={onChange} className="w-full h-10 px-3.5 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label htmlFor="sisc_group" className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">Grupo no SISC</label>
+                      <select id="sisc_group" name="sisc_group" value={form.sisc_group} onChange={onChange} className="w-full h-10 px-3.5 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all cursor-pointer">
+                        <option value="">Não informado</option>
+                        {classGroups.map((group) => (
+                          <option key={group.id} value={group.slug}>{group.name}</option>
+                        ))}
+                        {siscGroupOutsideList && (
+                          <option value={form.sisc_group}>{form.sisc_group} (turma não encontrada)</option>
+                        )}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">Turma no SOS</span>
+                      <div className="w-full h-10 px-3.5 flex items-center text-xs font-bold text-slate-500 bg-slate-100/70 border border-slate-200 rounded-lg">
+                        {turmaLabelBySlug(form.class_group) || 'Sem turma vinculada'}
+                      </div>
+                      <p className="text-[10px] font-semibold text-slate-400 ml-0.5">Atribuída na tela de Turmas.</p>
+                    </div>
+                  </div>
+
+                  {siscMismatch && (
+                    <div className="flex items-start gap-2 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs font-bold text-amber-800">
+                      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>
+                        Divergência: no SISC o usuário está em{' '}
+                        <strong>{turmaLabelBySlug(form.sisc_group)}</strong>, mas no SOS está vinculado a{' '}
+                        <strong>{turmaLabelBySlug(form.class_group)}</strong>. Ajuste em um dos sistemas para regularizar.
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

@@ -14,7 +14,8 @@ create table if not exists users (
     full_name text not null,
     email text unique not null,
     password_hash text not null,
-    role text not null check (role in ('admin', 'sede', 'coordenador')),
+    -- coordenador, tecnico e assistente compartilham o mesmo nivel de acesso (escopo de unidade)
+    role text not null check (role in ('admin', 'sede', 'coordenador', 'tecnico', 'assistente')),
     is_active boolean not null default true,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
@@ -73,6 +74,7 @@ create table if not exists students (
     family_benefit boolean not null default false,
     family_benefit_details text,
     family_members jsonb,
+    authorized_pickups jsonb,
     cras_status text,
     cras_link_reason text,
     cras_referral_agency text,
@@ -85,6 +87,8 @@ create table if not exists students (
     scfv_instructor text,
     scfv_boarding text,
     scfv_disembarkation text,
+    sisc_link_date date,
+    sisc_group text,
     advisor_notes text,
     enrollment_code text unique,
     contact_phone text,

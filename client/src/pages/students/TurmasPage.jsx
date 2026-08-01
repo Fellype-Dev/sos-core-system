@@ -149,7 +149,7 @@ function TurmasPage() {
   const handleRemoveTurma = async (row) => {
     if (
       !window.confirm(
-        `Excluir a turma "${row.name}"? Só é permitido se não houver usuários nem chamadas usando essa turma.`
+        `Excluir a turma "${row.name}"? Só é permitido se não houver usuários nem listas de presença usando essa turma.`
       )
     ) {
       return;

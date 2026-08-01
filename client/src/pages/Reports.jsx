@@ -39,12 +39,12 @@ const REPORT_TYPES = {
     description: 'Exporta a lista de turmas cadastradas na unidade selecionada.',
   },
   attendance_history: {
-    label: 'Histórico de chamadas',
-    description: 'Exporta um resumo das sessões de chamada filtrando por data, turma e período.',
+    label: 'Histórico de listas de presença',
+    description: 'Exporta um resumo das listas de presença filtrando por data, turma e período.',
   },
   attendance_detail: {
-    label: 'Chamada detalhada do dia',
-    description: 'Exporta a lista de usuarios presentes e faltosos de uma chamada específica.',
+    label: 'Lista de presença detalhada do dia',
+    description: 'Exporta a lista de usuarios presentes e faltosos de uma lista de presença específica.',
   },
 };
 
@@ -127,6 +127,10 @@ function Reports() {
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState('');
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [fullPdfLoading, setFullPdfLoading] = useState(false);
+  const [pdfStep, setPdfStep] = useState('');
+  // Desliga a animação do recharts durante a captura, senão o grafico sai pela metade no PDF.
+  const [isCapturing, setIsCapturing] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -378,10 +382,10 @@ function Reports() {
     }
   };
 
-  // 2. Exporta Histórico de chamadas
+  // 2. Exporta Histórico de listas de presença
   const exportAttendanceHistory = async () => {
     setLoading(true);
-    setLoadingStep('Filtrando histórico de chamadas...');
+    setLoadingStep('Filtrando histórico de listas de presença...');
     setError('');
     setSuccess('');
     try {
@@ -407,7 +411,7 @@ function Reports() {
       const list = response.data?.data || response.data || [];
 
       if (list.length === 0) {
-        setSuccess('Nenhuma chamada registrada encontrada com estes filtros.');
+        setSuccess('Nenhuma lista de presença registrada encontrada com estes filtros.');
         return;
       }
 
@@ -429,17 +433,17 @@ function Reports() {
         ]);
       });
 
-      downloadWorkbook(buildFileName('historico_chamadas'), [{ name: 'Histórico', rows }]);
-      setSuccess('Histórico de chamadas exportado com sucesso.');
+      downloadWorkbook(buildFileName('historico_listas_presenca'), [{ name: 'Histórico', rows }]);
+      setSuccess('Histórico de listas de presença exportado com sucesso.');
     } catch (err) {
-      setError(err?.response?.data?.message || 'Falha ao exportar o histórico de chamadas.');
+      setError(err?.response?.data?.message || 'Falha ao exportar o histórico de listas de presença.');
     } finally {
       setLoading(false);
       setLoadingStep('');
     }
   };
 
-  // 3. Exporta Chamada detalhada
+  // 3. Exporta lista de presença detalhada
   const exportAttendanceDetail = async () => {
     setLoading(true);
     setLoadingStep('Iniciando exportação detalhada...');
@@ -469,7 +473,7 @@ function Reports() {
       const details = response.data || response || [];
 
       if (details.length === 0) {
-        setSuccess('Nenhuma chamada encontrada para os filtros aplicados.');
+        setSuccess('Nenhuma lista de presença encontrada para os filtros aplicados.');
         return;
       }
 
@@ -505,13 +509,13 @@ function Reports() {
       });
 
       setLoadingStep('Gerando planilha Excel de duas abas...');
-      downloadWorkbook(buildFileName('chamada_detalhada'), [
+      downloadWorkbook(buildFileName('lista_presenca_detalhada'), [
         { name: 'Resumo', rows: summaryRows },
         { name: 'Detalhe', rows: detailRows },
       ]);
-      setSuccess('Chamada detalhada exportada com sucesso.');
+      setSuccess('Lista de presença detalhada exportada com sucesso.');
     } catch (err) {
-      setError(err?.response?.data?.message || 'Falha ao exportar a chamada detalhada.');
+      setError(err?.response?.data?.message || 'Falha ao exportar a lista de presença detalhada.');
     } finally {
       setLoading(false);
       setLoadingStep('');
@@ -539,82 +543,190 @@ function Reports() {
     }
   };
 
-  // Exportação do dashboard consolidado em PDF (branded, paginado em A4 retrato)
+  // Captura a prévia como canvas. Os SVGs do recharts precisam de width/height
+  // explícitos no clone, senão o html2canvas os ignora.
+  const capturePreviewCanvas = () => {
+    if (!previewRef.current) {
+      throw new Error('A prévia dos gráficos não está disponível para captura.');
+    }
+    return html2canvas(previewRef.current, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      onclone: (clonedDoc) => {
+        clonedDoc.querySelectorAll('svg').forEach((svg) => {
+          const bbox = svg.getBoundingClientRect();
+          svg.setAttribute('width', bbox.width || svg.clientWidth || 300);
+          svg.setAttribute('height', bbox.height || svg.clientHeight || 200);
+          svg.style.width = null;
+          svg.style.height = null;
+        });
+      },
+    });
+  };
+
+  // Espera o React repintar a prévia com o novo filtro antes de capturar.
+  const waitForRepaint = () =>
+    new Promise((resolve) => {
+      requestAnimationFrame(() => setTimeout(resolve, 350));
+    });
+
+  // Fatia um canvas em páginas A4, aplicando o cabeçalho institucional em cada uma.
+  // `cursor.page` acumula entre chamadas para permitir várias seções no mesmo PDF.
+  const appendCanvasPages = (pdf, canvas, headerOpts, cursor) => {
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 10;
+    const imgWidth = pageWidth - margin * 2;
+
+    // Área útil por página (entre o cabeçalho e o rodapé)
+    const headerBottom = 30;
+    const footerTop = pageHeight - 12;
+    const availMm = footerTop - headerBottom;
+
+    const pxPerMm = canvas.width / imgWidth;
+    const stripPx = Math.floor(availMm * pxPerMm);
+
+    let sy = 0;
+    while (sy < canvas.height) {
+      const sliceHeightPx = Math.min(stripPx, canvas.height - sy);
+
+      const strip = document.createElement('canvas');
+      strip.width = canvas.width;
+      strip.height = sliceHeightPx;
+      const sctx = strip.getContext('2d');
+      sctx.fillStyle = '#ffffff';
+      sctx.fillRect(0, 0, strip.width, strip.height);
+      sctx.drawImage(canvas, 0, sy, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
+
+      if (cursor.page > 0) pdf.addPage();
+      const startY = drawReportHeader(pdf, headerOpts);
+      pdf.addImage(strip.toDataURL('image/png'), 'PNG', margin, startY, imgWidth, sliceHeightPx / pxPerMm);
+
+      cursor.page += 1;
+      sy += sliceHeightPx;
+    }
+  };
+
+  // O rodapé só pode ser numerado no fim, quando o total de páginas é conhecido.
+  const stampFooters = (pdf) => {
+    const pageCount = pdf.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i += 1) {
+      pdf.setPage(i);
+      drawReportFooter(pdf, { pageNumber: i, pageCount });
+    }
+  };
+
+  // Exportação do dashboard em PDF, no escopo selecionado nos filtros (uma unidade ou o consolidado).
   const exportDashboardPdf = async () => {
     if (!previewRef.current) return;
     setPdfLoading(true);
+    setIsCapturing(true);
     setError('');
     try {
-      const element = previewRef.current;
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        onclone: (clonedDoc) => {
-          clonedDoc.querySelectorAll('svg').forEach((svg) => {
-            const bbox = svg.getBoundingClientRect();
-            svg.setAttribute('width', bbox.width || svg.clientWidth || 300);
-            svg.setAttribute('height', bbox.height || svg.clientHeight || 200);
-            svg.style.width = null;
-            svg.style.height = null;
-          });
-        },
-      });
+      await waitForRepaint();
+      const canvas = await capturePreviewCanvas();
 
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 10;
-      const imgWidth = pageWidth - margin * 2;
+      const cursor = { page: 0 };
 
-      const headerOpts = {
-        logo,
-        title: 'Relatório de Frequência',
-        subtitle: unitLabel,
-        metaLines: [
-          `Período: ${rangeLabel}`,
-          `Exportado em: ${new Date().toLocaleString('pt-BR')}`,
-        ],
-      };
+      appendCanvasPages(
+        pdf,
+        canvas,
+        {
+          logo,
+          title: 'Relatório de Frequência',
+          subtitle: unitLabel,
+          metaLines: [
+            `Período: ${rangeLabel}`,
+            `Exportado em: ${new Date().toLocaleString('pt-BR')}`,
+          ],
+        },
+        cursor
+      );
 
-      // Área útil por página (entre o cabeçalho e o rodapé)
-      const headerBottom = 30;
-      const footerTop = pageHeight - 12;
-      const availMm = footerTop - headerBottom;
-
-      const pxPerMm = canvas.width / imgWidth;
-      const stripPx = Math.floor(availMm * pxPerMm);
-      const pageCount = Math.max(1, Math.ceil(canvas.height / stripPx));
-
-      let sy = 0;
-      let page = 0;
-      while (sy < canvas.height) {
-        const sliceHeightPx = Math.min(stripPx, canvas.height - sy);
-
-        const strip = document.createElement('canvas');
-        strip.width = canvas.width;
-        strip.height = sliceHeightPx;
-        const sctx = strip.getContext('2d');
-        sctx.fillStyle = '#ffffff';
-        sctx.fillRect(0, 0, strip.width, strip.height);
-        sctx.drawImage(canvas, 0, sy, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
-
-        if (page > 0) pdf.addPage();
-        const startY = drawReportHeader(pdf, headerOpts);
-        pdf.addImage(strip.toDataURL('image/png'), 'PNG', margin, startY, imgWidth, sliceHeightPx / pxPerMm);
-        drawReportFooter(pdf, { pageNumber: page + 1, pageCount });
-
-        sy += sliceHeightPx;
-        page += 1;
-      }
-
+      stampFooters(pdf);
       pdf.save(`relatorio_frequencia_${unitFilter === 'all' ? 'consolidado' : selectedProgramId.slice(0, 8)}.pdf`);
       setSuccess('Relatório PDF exportado com sucesso.');
     } catch (err) {
       console.error('Erro ao gerar PDF:', err);
       setError(`Falha ao exportar o relatório consolidado em PDF: ${err.message || err}`);
     } finally {
+      setIsCapturing(false);
       setPdfLoading(false);
+    }
+  };
+
+  // Relatório geral: uma seção por unidade seguida do consolidado, tudo num PDF só.
+  // Percorre o filtro de unidade capturando a prévia a cada troca.
+  const exportFullPdf = async () => {
+    if (!previewRef.current) return;
+
+    const units = programData.map((row) => row.program);
+    if (units.length === 0) {
+      setError('Nenhuma unidade disponível para gerar o relatório geral.');
+      return;
+    }
+
+    const originalFilter = unitFilter;
+    setFullPdfLoading(true);
+    setIsCapturing(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const cursor = { page: 0 };
+      const exportedAt = new Date().toLocaleString('pt-BR');
+      const metaLines = [`Período: ${rangeLabel}`, `Exportado em: ${exportedAt}`];
+
+      // Uma seção por unidade, na mesma ordem do seletor.
+      for (let i = 0; i < units.length; i += 1) {
+        const unit = units[i];
+        setPdfStep(`Unidade ${i + 1} de ${units.length}: ${unit.name}`);
+        setUnitFilter(String(unit.id));
+        await waitForRepaint();
+
+        const canvas = await capturePreviewCanvas();
+        appendCanvasPages(
+          pdf,
+          canvas,
+          { logo, title: 'Relatório de Frequência', subtitle: unit.name, metaLines },
+          cursor
+        );
+      }
+
+      // Consolidado de todas as unidades, fechando o documento.
+      setPdfStep('Montando o consolidado geral...');
+      setUnitFilter('all');
+      await waitForRepaint();
+
+      const totalCanvas = await capturePreviewCanvas();
+      appendCanvasPages(
+        pdf,
+        totalCanvas,
+        {
+          logo,
+          title: 'Relatório de Frequência',
+          subtitle: `Consolidado geral · ${units.length} ${units.length === 1 ? 'unidade' : 'unidades'}`,
+          metaLines,
+        },
+        cursor
+      );
+
+      stampFooters(pdf);
+      pdf.save(`relatorio_geral_${new Date().toISOString().slice(0, 10)}.pdf`);
+      setSuccess(
+        `Relatório geral exportado: ${units.length} ${units.length === 1 ? 'unidade' : 'unidades'} + consolidado.`
+      );
+    } catch (err) {
+      console.error('Erro ao gerar o relatório geral:', err);
+      setError(`Falha ao exportar o relatório geral em PDF: ${err.message || err}`);
+    } finally {
+      setUnitFilter(originalFilter);
+      setIsCapturing(false);
+      setFullPdfLoading(false);
+      setPdfStep('');
     }
   };
 
@@ -732,7 +844,7 @@ function Reports() {
                   ) : (
                     <div className="space-y-1.5 max-w-[200px]">
                       <label htmlFor="reportDate" className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 flex items-center gap-1">
-                        <span>Data da Chamada</span>
+                        <span>Data da Lista de Presença</span>
                         {needsDate && <span className="font-normal text-[9px] text-red-500 tracking-normal">(obrigatório)</span>}
                       </label>
                       <Input
@@ -874,17 +986,41 @@ function Reports() {
                     Prévia dos gráficos que serão impressos no PDF · {unitLabel} · {rangeLabel}
                   </CardDescription>
                 </div>
-                <Button
-                  type="button"
-                  className="h-10 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1.5 cursor-pointer shadow-lg shadow-indigo-600/10"
-                  onClick={exportDashboardPdf}
-                  disabled={pdfLoading || chartsLoading || !hasPreviewData}
-                  title={chartsLoading ? 'Carregando dados para o PDF.' : 'Exportar relatório em PDF.'}
-                >
-                  <FileText className="h-4 w-4" />
-                  {pdfLoading ? 'Gerando PDF...' : 'Exportar PDF'}
-                </Button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 text-xs font-bold flex items-center gap-1.5 cursor-pointer border-slate-200 text-slate-700 hover:bg-slate-50"
+                    onClick={exportDashboardPdf}
+                    disabled={pdfLoading || fullPdfLoading || chartsLoading || !hasPreviewData}
+                    title={chartsLoading ? 'Carregando dados para o PDF.' : `Exportar apenas ${unitLabel}.`}
+                  >
+                    <FileText className="h-4 w-4" />
+                    {pdfLoading ? 'Gerando PDF...' : 'Exportar seleção'}
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-10 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1.5 cursor-pointer shadow-lg shadow-indigo-600/10"
+                    onClick={exportFullPdf}
+                    disabled={pdfLoading || fullPdfLoading || chartsLoading || programData.length === 0}
+                    title={
+                      chartsLoading
+                        ? 'Carregando dados para o PDF.'
+                        : 'Gera um único PDF com uma seção por unidade e o consolidado geral no final.'
+                    }
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                    {fullPdfLoading ? 'Gerando...' : 'Relatório geral (todas as unidades)'}
+                  </Button>
+                </div>
               </div>
+
+              {fullPdfLoading && pdfStep && (
+                <div className="mt-3 flex items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-100 px-3 py-2 text-[11px] font-bold text-indigo-700">
+                  <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-indigo-600 shrink-0" />
+                  <span>{pdfStep}</span>
+                </div>
+              )}
             </CardHeader>
             <CardContent className="p-6">
               {chartsLoading ? (
@@ -935,13 +1071,13 @@ function Reports() {
                           <YAxis yAxisId="right" orientation="right" domain={[0, 100]} unit="%" tick={{ fontSize: 10, fill: '#3e4095' }} axisLine={false} tickLine={false} />
                           <Tooltip />
                           <Legend wrapperStyle={{ fontSize: 10 }} />
-                          <Bar yAxisId="left" dataKey="Presenças" fill={COLORS.success} radius={[4, 4, 0, 0]} maxBarSize={38} stackId="a" />
-                          <Bar yAxisId="left" dataKey="Faltas" fill={COLORS.danger} radius={[4, 4, 0, 0]} maxBarSize={38} stackId="a" />
-                          <Line yAxisId="right" type="monotone" dataKey="Frequência" stroke={COLORS.primary} strokeWidth={2.5} dot={{ r: 2.5, fill: COLORS.primary }} unit="%" />
+                          <Bar isAnimationActive={!isCapturing} yAxisId="left" dataKey="Presenças" fill={COLORS.success} radius={[4, 4, 0, 0]} maxBarSize={38} stackId="a" />
+                          <Bar isAnimationActive={!isCapturing} yAxisId="left" dataKey="Faltas" fill={COLORS.danger} radius={[4, 4, 0, 0]} maxBarSize={38} stackId="a" />
+                          <Line isAnimationActive={!isCapturing} yAxisId="right" type="monotone" dataKey="Frequência" stroke={COLORS.primary} strokeWidth={2.5} dot={{ r: 2.5, fill: COLORS.primary }} unit="%" />
                         </ComposedChart>
                       </ResponsiveContainer>
                     ) : (
-                      <p className="text-center py-10 text-slate-400 text-xs italic">Nenhum registro de chamada neste período.</p>
+                      <p className="text-center py-10 text-slate-400 text-xs italic">Nenhuma lista de presença neste período.</p>
                     )}
                   </div>
 
@@ -960,8 +1096,8 @@ function Reports() {
                           <YAxis yAxisId="right" orientation="right" domain={[0, 100]} unit="%" tick={{ fontSize: 10, fill: '#72b736' }} axisLine={false} tickLine={false} />
                           <Tooltip />
                           <Legend wrapperStyle={{ fontSize: 10 }} />
-                          <Bar yAxisId="left" dataKey="Cadastros" fill={COLORS.primary} radius={[4, 4, 0, 0]} maxBarSize={40} />
-                          <Bar yAxisId="right" dataKey="Frequência" fill={COLORS.success} radius={[4, 4, 0, 0]} maxBarSize={40} unit="%" />
+                          <Bar isAnimationActive={!isCapturing} yAxisId="left" dataKey="Cadastros" fill={COLORS.primary} radius={[4, 4, 0, 0]} maxBarSize={40} />
+                          <Bar isAnimationActive={!isCapturing} yAxisId="right" dataKey="Frequência" fill={COLORS.success} radius={[4, 4, 0, 0]} maxBarSize={40} unit="%" />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -978,6 +1114,7 @@ function Reports() {
                         <ResponsiveContainer width="100%" height={240}>
                           <PieChart>
                             <Pie
+                              isAnimationActive={!isCapturing}
                               data={[
                                 { name: 'Presente', value: current.presentCount },
                                 { name: 'Ausente', value: current.absentCount },
@@ -1003,7 +1140,7 @@ function Reports() {
                         </h4>
                         <ResponsiveContainer width="100%" height={240}>
                           <PieChart>
-                            <Pie data={turmaData} dataKey="value" nameKey="name" outerRadius={75} label={({ name, value }) => `${name}: ${value}`}>
+                            <Pie isAnimationActive={!isCapturing} data={turmaData} dataKey="value" nameKey="name" outerRadius={75} label={({ name, value }) => `${name}: ${value}`}>
                               {turmaData.map((entry, index) => (
                                 <Cell key={entry.name} fill={PALETTE[index % PALETTE.length]} />
                               ))}
@@ -1027,7 +1164,7 @@ function Reports() {
                             <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
                             <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
                             <Tooltip />
-                            <Bar dataKey="value" name="Usuários" fill={COLORS.info} radius={[4, 4, 0, 0]} maxBarSize={40} />
+                            <Bar isAnimationActive={!isCapturing} dataKey="value" name="Usuários" fill={COLORS.info} radius={[4, 4, 0, 0]} maxBarSize={40} />
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
