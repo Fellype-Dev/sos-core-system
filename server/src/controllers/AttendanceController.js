@@ -57,12 +57,12 @@ class AttendanceController {
             session: null,
             records: [],
           },
-          'Sessao de chamada ainda nao criada'
+          'Lista de presenca ainda nao criada'
         );
       }
 
       const records = await Attendance.listRecords(session.id);
-      return ApiResponse.success(res, { session, records }, 'Chamada carregada com sucesso');
+      return ApiResponse.success(res, { session, records }, 'Lista de presenca carregada com sucesso');
     } catch (error) {
       return next(error);
     }
@@ -132,7 +132,7 @@ class AttendanceController {
           session,
           records: savedRecords,
         },
-        'Chamada salva com sucesso'
+        'Lista de presenca salva com sucesso'
       );
     } catch (error) {
       return next(error);
@@ -160,7 +160,7 @@ class AttendanceController {
         period,
       });
 
-      return ApiResponse.success(res, { data: sessions }, 'Sessoes de chamada listadas com sucesso');
+      return ApiResponse.success(res, { data: sessions }, 'Listas de presenca listadas com sucesso');
     } catch (error) {
       return next(error);
     }
@@ -175,7 +175,7 @@ class AttendanceController {
 
       const detail = await Attendance.getSessionDetail(id);
       if (!detail) {
-        return ApiResponse.notFound(res, 'Sessao de chamada nao encontrada');
+        return ApiResponse.notFound(res, 'Lista de presenca nao encontrada');
       }
 
       const access = this.validateProgramAccess(req, detail.session.program_id);
@@ -183,7 +183,7 @@ class AttendanceController {
         return ApiResponse.error(res, access.message, 403);
       }
 
-      return ApiResponse.success(res, detail, 'Detalhe da chamada carregado com sucesso');
+      return ApiResponse.success(res, detail, 'Detalhe da lista de presenca carregado com sucesso');
     } catch (error) {
       return next(error);
     }
@@ -218,7 +218,7 @@ class AttendanceController {
         details: { attendance_date, start_date, end_date, class_group, period },
       });
 
-      return ApiResponse.success(res, details, 'Detalhes das chamadas carregados com sucesso');
+      return ApiResponse.success(res, details, 'Detalhes das listas de presenca carregados com sucesso');
     } catch (error) {
       return next(error);
     }

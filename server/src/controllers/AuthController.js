@@ -4,6 +4,7 @@ const { supabase } = require('../config/database');
 const JwtUtils = require('../utils/jwtUtils');
 const ApiResponse = require('../utils/ApiResponse');
 const AuditLog = require('../models/AuditLog');
+const { isUnitRole } = require('../utils/roles');
 
 /** Unifica vínculos user_programs → programs (sem duplicar por id). */
 function programsFromUserLinks(userPrograms) {
@@ -92,7 +93,7 @@ class AuthController {
       const allowedProgramIds = allowedPrograms.map((program) => program.id);
 
       let activeProgramId = null;
-      if (user.role === 'coordenador') {
+      if (isUnitRole(user.role)) {
         if (allowedProgramIds.length === 0) {
           return ApiResponse.error(res, 'Usuario sem unidade vinculada', 403);
         }

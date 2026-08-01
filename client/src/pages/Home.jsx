@@ -334,7 +334,7 @@ function Home() {
           ) : (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <Activity className="h-10 w-10 text-slate-200 mb-3" />
-              <p className="text-sm font-bold text-slate-400">Nenhum registro de chamada neste período</p>
+              <p className="text-sm font-bold text-slate-400">Nenhuma lista de presença neste período</p>
               <p className="text-xs text-slate-400 mt-1">Ajuste o período ou a unidade para visualizar a evolução</p>
             </div>
           )}
@@ -478,7 +478,7 @@ function Home() {
       <Card className="border-slate-100/70 shadow-sm bg-slate-50/50 p-6 rounded-2xl">
         <p className="text-xs text-slate-500 leading-relaxed max-w-3xl">
           📱 O <strong>SIGU</strong> (Sistema Integrado para Gerenciamento de Usuários) centraliza o controle
-          operacional do Serviço de Obras Sociais. Ele integra cadastros de participantes, chamadas diárias,
+          operacional do Serviço de Obras Sociais. Ele integra cadastros de participantes, listas de presença diárias,
           análises de turmas e relatórios de frequência de todas as unidades ativas para auditorias e planejamentos.
         </p>
       </Card>

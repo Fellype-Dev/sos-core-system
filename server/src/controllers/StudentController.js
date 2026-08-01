@@ -41,7 +41,16 @@ class StudentController {
 
       const classGroupFilter = parseClassGroupFilter(req.query.class_group);
 
-      const students = await Student.findAll({ programId, classGroup: classGroupFilter });
+      // Sem o parametro, retorna ativos e inativos (historico preservado).
+      let isActiveFilter;
+      if (req.query.is_active === 'true') isActiveFilter = true;
+      else if (req.query.is_active === 'false') isActiveFilter = false;
+
+      const students = await Student.findAll({
+        programId,
+        classGroup: classGroupFilter,
+        isActive: isActiveFilter,
+      });
       return ApiResponse.success(res, students, 'Usuarios listados com sucesso');
     } catch (error) {
       return next(error);
@@ -114,6 +123,7 @@ class StudentController {
         'family_benefit',
         'family_benefit_details',
         'family_members',
+        'authorized_pickups',
         'cras_status',
         'cras_link_reason',
         'cras_referral_agency',
@@ -126,6 +136,8 @@ class StudentController {
         'scfv_instructor',
         'scfv_boarding',
         'scfv_disembarkation',
+        'sisc_link_date',
+        'sisc_group',
         'advisor_notes',
         'enrollment_code',
       ];
@@ -189,6 +201,7 @@ class StudentController {
         'family_benefit',
         'family_benefit_details',
         'family_members',
+        'authorized_pickups',
         'cras_status',
         'cras_link_reason',
         'cras_referral_agency',
@@ -201,6 +214,8 @@ class StudentController {
         'scfv_instructor',
         'scfv_boarding',
         'scfv_disembarkation',
+        'sisc_link_date',
+        'sisc_group',
         'advisor_notes',
         'enrollment_code',
         'is_active',

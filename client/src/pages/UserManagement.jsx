@@ -168,7 +168,10 @@ function UserManagement() {
         return 'bg-red-50 text-red-700 border-red-100/80';
       case 'sede':
         return 'bg-blue-50 text-blue-700 border-blue-100/80';
+      // Perfis de unidade compartilham o mesmo nivel de acesso, entao a mesma cor.
       case 'coordenador':
+      case 'tecnico':
+      case 'assistente':
         return 'bg-emerald-50 text-emerald-700 border-emerald-100/80';
       default:
         return 'bg-slate-50 text-slate-700 border-slate-200';
@@ -183,6 +186,10 @@ function UserManagement() {
         return 'Equipe Sede';
       case 'coordenador':
         return 'Coordenador';
+      case 'tecnico':
+        return 'Técnico';
+      case 'assistente':
+        return 'Assistente';
       default:
         return role;
     }
@@ -395,6 +402,8 @@ function UserManagement() {
                     onChange={handleChange}
                   >
                     <option value="coordenador">Coordenador (Acesso Unidade)</option>
+                    <option value="tecnico">Técnico (Acesso Unidade)</option>
+                    <option value="assistente">Assistente (Acesso Unidade)</option>
                     <option value="sede">Equipe da Sede (Todas as unidades)</option>
                     <option value="admin">Administrador Geral (Sede + Escrita)</option>
                   </select>
@@ -420,7 +429,7 @@ function UserManagement() {
                     </div>
                   )}
                   <p className="text-[9px] text-slate-400 font-semibold leading-relaxed mt-1 block">
-                    Associe as unidades físicas que este funcionário poderá acessar e realizar chamadas.
+                    Associe as unidades físicas que este funcionário poderá acessar e realizar listas de presença.
                   </p>
                 </div>
 

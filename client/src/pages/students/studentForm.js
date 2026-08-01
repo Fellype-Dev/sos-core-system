@@ -30,6 +30,7 @@ export const initialForm = () => ({
   family_benefit: false,
   family_benefit_details: '',
   family_members: [],
+  authorized_pickups: [],
   cras_status: '',
   cras_link_reason: '',
   cras_referral_agency: '',
@@ -42,9 +43,77 @@ export const initialForm = () => ({
   scfv_instructor: '',
   scfv_boarding: '',
   scfv_disembarkation: '',
+  sisc_link_date: '',
+  sisc_group: '',
   advisor_notes: '',
   program_id: '',
+  // Somente leitura no wizard: a turma é atribuída na tela de Turmas.
+  // Fica aqui apenas para comparar com o grupo do SISC.
+  class_group: '',
 });
+
+/**
+ * Data que representa a entrada do assistido no programa.
+ *
+ * Prioriza a inserção no SCFV: o created_at só diz quando o cadastro foi digitado
+ * no sistema, o que subestima quem já frequentava antes da implantação.
+ */
+export function getEnrollmentDate(student) {
+  const scfv = student?.scfv_insertion_date;
+  if (scfv) return { date: String(scfv).slice(0, 10), source: 'scfv' };
+  if (student?.created_at) return { date: String(student.created_at).slice(0, 10), source: 'sistema' };
+  return null;
+}
+
+/**
+ * Tempo decorrido em anos/meses a partir de uma data ISO (YYYY-MM-DD).
+ * Devolve null para data ausente, inválida ou no futuro.
+ */
+export function getTenure(isoDate) {
+  if (!isoDate) return null;
+  const [year, month, day] = String(isoDate).slice(0, 10).split('-').map(Number);
+  if (!year || !month || !day) return null;
+
+  const start = new Date(year, month - 1, day);
+  if (Number.isNaN(start.getTime())) return null;
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (start > today) return null;
+
+  let months = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
+  if (today.getDate() < start.getDate()) months -= 1;
+
+  const totalDays = Math.floor((today - start) / 86400000);
+  const years = Math.floor(months / 12);
+  const restMonths = months % 12;
+
+  let label;
+  if (months < 1) {
+    if (totalDays === 0) label = 'hoje';
+    else if (totalDays === 1) label = 'há 1 dia';
+    else label = `há ${totalDays} dias`;
+  } else if (years < 1) {
+    label = months === 1 ? 'há 1 mês' : `há ${months} meses`;
+  } else {
+    const yearPart = years === 1 ? '1 ano' : `${years} anos`;
+    if (restMonths === 0) label = `há ${yearPart}`;
+    else label = `há ${yearPart} e ${restMonths === 1 ? '1 mês' : `${restMonths} meses`}`;
+  }
+
+  return { years, months, totalDays, label };
+}
+
+/**
+ * Divergência entre o grupo informado no SISC e a turma vinculada no SOS.
+ * Só acusa quando os dois estão preenchidos — faltar um não é divergência, é cadastro incompleto.
+ */
+export function hasSiscMismatch(student) {
+  const sisc = String(student?.sisc_group || '').trim();
+  const sos = String(student?.class_group || '').trim();
+  if (!sisc || !sos) return false;
+  return sisc !== sos;
+}
 
 export const COLOR_OPTIONS = ['Branca', 'Preta', 'Parda', 'Amarela', 'Indigena', 'Outro'];
 export const SCHOOL_SHIFT_OPTIONS = ['Manha', 'Tarde', 'Noite', 'Integral', 'Outro'];
@@ -67,6 +136,11 @@ export const SCFV_SHIFTS = [
 export function buildStudentPayload(form, canChooseProgram) {
   const familyMembers = (Array.isArray(form.family_members) ? form.family_members : []).filter((member) =>
     Object.values(member || {}).some((value) => String(value || '').trim())
+  );
+
+  // Só vale como autorizado quem tem nome; sem nome não há como conferir na retirada.
+  const authorizedPickups = (Array.isArray(form.authorized_pickups) ? form.authorized_pickups : []).filter(
+    (person) => String(person?.name || '').trim()
   );
 
   const payload = {
@@ -99,6 +173,7 @@ export function buildStudentPayload(form, canChooseProgram) {
     family_benefit: Boolean(form.family_benefit),
     family_benefit_details: form.family_benefit_details.trim() || null,
     family_members: familyMembers,
+    authorized_pickups: authorizedPickups,
     cras_status: form.cras_status || null,
     cras_link_reason: form.cras_link_reason.trim() || null,
     cras_referral_agency: form.cras_referral_agency.trim() || null,
@@ -111,6 +186,8 @@ export function buildStudentPayload(form, canChooseProgram) {
     scfv_instructor: form.scfv_instructor.trim() || null,
     scfv_boarding: form.scfv_boarding.trim() || null,
     scfv_disembarkation: form.scfv_disembarkation.trim() || null,
+    sisc_link_date: form.sisc_link_date || null,
+    sisc_group: form.sisc_group || null,
     advisor_notes: form.advisor_notes.trim() || null,
   };
 
@@ -153,6 +230,7 @@ export function mapStudentToForm(item, fallbackProgramId = '') {
     family_benefit: Boolean(item.family_benefit),
     family_benefit_details: item.family_benefit_details || '',
     family_members: Array.isArray(item.family_members) ? item.family_members : [],
+    authorized_pickups: Array.isArray(item.authorized_pickups) ? item.authorized_pickups : [],
     cras_status: item.cras_status || '',
     cras_link_reason: item.cras_link_reason || '',
     cras_referral_agency: item.cras_referral_agency || '',
@@ -165,7 +243,10 @@ export function mapStudentToForm(item, fallbackProgramId = '') {
     scfv_instructor: item.scfv_instructor || '',
     scfv_boarding: item.scfv_boarding || '',
     scfv_disembarkation: item.scfv_disembarkation || '',
+    sisc_link_date: item.sisc_link_date ? String(item.sisc_link_date).slice(0, 10) : '',
+    sisc_group: item.sisc_group || '',
     advisor_notes: item.advisor_notes || '',
     program_id: item.program_id || item.programs?.id || fallbackProgramId || '',
+    class_group: item.class_group || '',
   };
 }

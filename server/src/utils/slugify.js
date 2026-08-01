@@ -1,5 +1,5 @@
 /**
- * Gera slug estável para turma (usado em students.class_group e na chamada).
+ * Gera slug estável para turma (usado em students.class_group e na lista de presença).
  * @param {string} name
  * @returns {string}
  */

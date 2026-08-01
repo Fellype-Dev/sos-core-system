@@ -1,5 +1,5 @@
 // Helpers compartilhados de análise temporal para os painéis (Home e Relatórios).
-// As datas de chamada (attendance_date) chegam como 'YYYY-MM-DD', o que permite
+// As datas das listas de presença (attendance_date) chegam como 'YYYY-MM-DD', o que permite
 // comparação lexicográfica direta entre strings.
 
 export const MONTHS_SHORT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
