@@ -149,6 +149,57 @@ export function buildTrend(sessions, range) {
     });
 }
 
+// Cores da distribuição por turma: uma cor para as turmas, uma neutra para as
+// barras que não são turma (sem turma, agrupamento das demais).
+export const TURMA_COR = '#4f46e5';
+export const TURMA_COR_NEUTRA = '#64748b';
+
+/**
+ * Distribuição de assistidos por turma, pronta para gráfico de barras.
+ *
+ * Usa o nome da turma (e não o código interno) e mantém as turmas separadas por
+ * unidade — nomes como "Esperança" existem em mais de uma unidade e, agrupados
+ * pelo código, apareceriam como uma turma só.
+ *
+ * @param {Array} units linhas { program, students, classGroups }
+ * @param {{ topN?: number }} opcoes quantas turmas listar antes de agrupar o resto
+ */
+export function buildTurmaDistribution(units, { topN = 12 } = {}) {
+  const variasUnidades = units.length > 1;
+  const contagem = new Map();
+
+  units.forEach((row) => {
+    const nomePorSlug = new Map((row.classGroups || []).map((g) => [g.slug, g.name]));
+
+    (row.students || []).forEach((student) => {
+      const slug = student.class_group || null;
+      const chave = `${row.program?.id || ''}::${slug || ''}`;
+      const nome = slug ? nomePorSlug.get(slug) || slug : 'Sem turma';
+      const unidade = row.program?.code || row.program?.name || '';
+
+      const atual = contagem.get(chave) || {
+        name: variasUnidades && unidade ? `${nome} · ${unidade}` : nome,
+        value: 0,
+        semTurma: !slug,
+      };
+      atual.value += 1;
+      contagem.set(chave, atual);
+    });
+  });
+
+  const ordenadas = [...contagem.values()].sort((a, b) => b.value - a.value);
+  if (ordenadas.length <= topN + 1) return ordenadas;
+
+  const principais = ordenadas.slice(0, topN);
+  const restantes = ordenadas.slice(topN);
+  const total = restantes.reduce((soma, item) => soma + item.value, 0);
+
+  return [
+    ...principais,
+    { name: `Outras ${restantes.length} turmas`, value: total, agrupado: true },
+  ];
+}
+
 // Novos cadastros dentro do intervalo (usa created_at dos estudantes).
 export function countNewStudents(units, range) {
   if (!range.start && !range.end) return null;

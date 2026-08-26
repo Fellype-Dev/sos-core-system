@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-  PieChart, Pie, BarChart, Bar, ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
+  PieChart, Pie, BarChart, Bar, ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LabelList
 } from 'recharts';
 import {
   Users, Calendar, TrendingUp, Building, BarChart3, PieChart as PieIcon, Clock, Activity, LayoutGrid
@@ -15,7 +15,14 @@ import DeltaBadge from '../components/DeltaBadge';
 import {
   PERIOD_PRESETS, getPresetRange, getPreviousRange, sessionInRange,
   aggregateMetrics, buildTrend, countNewStudents, bucketLabel,
+  buildTurmaDistribution, TURMA_COR, TURMA_COR_NEUTRA,
 } from '../lib/analytics';
+
+/** Nomes longos de turma quebram o eixo; o valor completo fica na dica de contexto. */
+const encurtarRotulo = (texto) => {
+  const t = String(texto || '');
+  return t.length > 26 ? `${t.slice(0, 25)}…` : t;
+};
 
 const COLORS = {
   primary: '#3e4095',
@@ -150,16 +157,7 @@ function Home() {
   const trendData = useMemo(() => buildTrend(filteredSessions, range), [filteredSessions, range]);
 
   // Distribuição por turma (cadastros atuais das unidades em foco)
-  const turmaData = useMemo(() => {
-    const byTurma = {};
-    selectedUnits.forEach((row) => {
-      row.students.forEach((student) => {
-        const t = student.class_group || 'Sem turma';
-        byTurma[t] = (byTurma[t] || 0) + 1;
-      });
-    });
-    return Object.entries(byTurma).map(([name, value]) => ({ name, value }));
-  }, [selectedUnits]);
+  const turmaData = useMemo(() => buildTurmaDistribution(selectedUnits), [selectedUnits]);
 
   // Distribuição por período (manhã/tarde)
   const periodData = useMemo(() => {
@@ -415,26 +413,43 @@ function Home() {
                 <BarChart3 className="h-5 w-5 text-indigo-600" />
                 <CardTitle className="text-base font-bold text-slate-900">Usuários por Turma</CardTitle>
               </div>
-              <CardDescription className="text-xs text-slate-400">Distribuição de participantes cadastrados por turma</CardDescription>
+              <CardDescription className="text-xs text-slate-400">
+                Participantes cadastrados por turma, da maior para a menor
+              </CardDescription>
             </CardHeader>
             <CardContent className="p-6">
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie
-                    data={turmaData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={true}
-                    label={({ name, value }) => `${name}: ${value}`}
-                    outerRadius={85}
-                    dataKey="value"
-                  >
-                    {turmaData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
+              <ResponsiveContainer width="100%" height={Math.max(200, turmaData.length * 30 + 24)}>
+                <BarChart data={turmaData} layout="vertical" margin={{ top: 4, right: 44, bottom: 4, left: 4 }}>
+                  <CartesianGrid horizontal={false} stroke="#f1f5f9" />
+                  <XAxis type="number" hide />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={168}
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 11, fill: '#475569' }}
+                    tickFormatter={encurtarRotulo}
+                  />
+                  <Tooltip
+                    cursor={{ fill: '#f8fafc' }}
+                    formatter={(value) => [`${value} ${value === 1 ? 'usuário' : 'usuários'}`, '']}
+                    contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: 12 }}
+                  />
+                  <Bar dataKey="value" barSize={16} radius={[0, 4, 4, 0]}>
+                    {turmaData.map((entry) => (
+                      <Cell
+                        key={entry.name}
+                        fill={entry.semTurma || entry.agrupado ? TURMA_COR_NEUTRA : TURMA_COR}
+                      />
                     ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0' }} />
-                </PieChart>
+                    <LabelList
+                      dataKey="value"
+                      position="right"
+                      style={{ fontSize: 11, fontWeight: 700, fill: '#334155' }}
+                    />
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
