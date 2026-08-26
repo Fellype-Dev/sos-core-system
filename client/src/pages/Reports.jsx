@@ -15,17 +15,12 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import DashboardFilters from '../components/DashboardFilters';
 import DeltaBadge from '../components/DeltaBadge';
+import TurmaDashboard from '../components/TurmaDashboard';
 import {
   PERIOD_PRESETS, getPresetRange, getPreviousRange, sessionInRange,
   aggregateMetrics, buildTrend, bucketLabel,
-  buildTurmaDistribution, TURMA_COR, TURMA_COR_NEUTRA,
+  buildTurmaDashboard,
 } from '../lib/analytics';
-
-/** Nomes longos de turma quebram o eixo; o valor completo fica na dica de contexto. */
-const encurtarRotulo = (texto) => {
-  const t = String(texto || '');
-  return t.length > 24 ? `${t.slice(0, 23)}…` : t;
-};
 import { loadImageDataURL, drawReportHeader, drawReportFooter, SOS_LOGO_SRC } from '../lib/pdfBranding';
 
 const COLORS = {
@@ -296,11 +291,7 @@ function Reports() {
 
   const trendData = useMemo(() => buildTrend(filteredSessions, range), [filteredSessions, range]);
 
-  // No PDF cabem menos linhas que no painel: agrupa a partir da décima turma.
-  const turmaData = useMemo(
-    () => buildTurmaDistribution(selectedUnits, { topN: 10 }),
-    [selectedUnits]
-  );
+  const turmaData = useMemo(() => buildTurmaDashboard(selectedUnits), [selectedUnits]);
 
   const periodData = useMemo(() => {
     const byPeriod = {};
@@ -1134,45 +1125,13 @@ function Reports() {
                       </div>
                     )}
 
-                    {turmaData.length > 0 && (
+                    {turmaData.totalTurmas > 0 && (
                       <div className="border border-slate-100 rounded-xl p-4 bg-white shadow-sm">
                         <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-1.5">
                           <BarChart3 className="h-4 w-4 text-indigo-500" />
                           Usuários por Turma
                         </h4>
-                        <ResponsiveContainer width="100%" height={Math.max(180, turmaData.length * 26 + 20)}>
-                          <BarChart data={turmaData} layout="vertical" margin={{ top: 4, right: 40, bottom: 4, left: 4 }}>
-                            <CartesianGrid horizontal={false} stroke="#f1f5f9" />
-                            <XAxis type="number" hide />
-                            <YAxis
-                              type="category"
-                              dataKey="name"
-                              width={150}
-                              tickLine={false}
-                              axisLine={false}
-                              tick={{ fontSize: 10, fill: '#475569' }}
-                              tickFormatter={encurtarRotulo}
-                            />
-                            <Tooltip
-                              cursor={{ fill: '#f8fafc' }}
-                              formatter={(value) => [`${value} ${value === 1 ? 'usuário' : 'usuários'}`, '']}
-                              contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: 12 }}
-                            />
-                            <Bar dataKey="value" barSize={14} radius={[0, 4, 4, 0]} isAnimationActive={!isCapturing}>
-                              {turmaData.map((entry) => (
-                                <Cell
-                                  key={entry.name}
-                                  fill={entry.semTurma || entry.agrupado ? TURMA_COR_NEUTRA : TURMA_COR}
-                                />
-                              ))}
-                              <LabelList
-                                dataKey="value"
-                                position="right"
-                                style={{ fontSize: 10, fontWeight: 700, fill: '#334155' }}
-                              />
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
+                        <TurmaDashboard dados={turmaData} compacto />
                       </div>
                     )}
 

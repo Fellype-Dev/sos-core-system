@@ -149,55 +149,80 @@ export function buildTrend(sessions, range) {
     });
 }
 
-// Cores da distribuição por turma: uma cor para as turmas, uma neutra para as
-// barras que não são turma (sem turma, agrupamento das demais).
-export const TURMA_COR = '#4f46e5';
-export const TURMA_COR_NEUTRA = '#64748b';
+/**
+ * Cor de cada unidade no painel de turmas. Dentro de um painel a identidade da
+ * barra está no rótulo, então a cor identifica a unidade, não a turma.
+ * Paleta verificada para daltonismo e contraste (validate_palette, modo claro).
+ */
+export const CORES_UNIDADE = ['#4f46e5', '#0d9488', '#d97706'];
 
 /**
- * Distribuição de assistidos por turma, pronta para gráfico de barras.
+ * Distribuição de assistidos por turma, agrupada por unidade.
  *
- * Usa o nome da turma (e não o código interno) e mantém as turmas separadas por
- * unidade — nomes como "Esperança" existem em mais de uma unidade e, agrupados
- * pelo código, apareceriam como uma turma só.
+ * Traz TODAS as turmas cadastradas, inclusive as que estão sem ninguém — turma
+ * vazia é informação, não ausência de dado. As turmas ficam separadas por
+ * unidade porque um mesmo nome ("Esperança") existe em mais de uma; agrupá-las
+ * pelo código do sistema somaria turmas diferentes.
+ *
+ * Quem está sem turma sai do ranking: não é uma turma e, por costumar ser o
+ * maior grupo, achatava a comparação. Volta como número à parte, que é onde ele
+ * age — indica vínculos a fazer.
  *
  * @param {Array} units linhas { program, students, classGroups }
- * @param {{ topN?: number }} opcoes quantas turmas listar antes de agrupar o resto
  */
-export function buildTurmaDistribution(units, { topN = 12 } = {}) {
-  const variasUnidades = units.length > 1;
-  const contagem = new Map();
-
-  units.forEach((row) => {
-    const nomePorSlug = new Map((row.classGroups || []).map((g) => [g.slug, g.name]));
+export function buildTurmaDashboard(units) {
+  const unidades = units.map((row) => {
+    const contagem = new Map();
+    let semTurma = 0;
 
     (row.students || []).forEach((student) => {
       const slug = student.class_group || null;
-      const chave = `${row.program?.id || ''}::${slug || ''}`;
-      const nome = slug ? nomePorSlug.get(slug) || slug : 'Sem turma';
-      const unidade = row.program?.code || row.program?.name || '';
-
-      const atual = contagem.get(chave) || {
-        name: variasUnidades && unidade ? `${nome} · ${unidade}` : nome,
-        value: 0,
-        semTurma: !slug,
-      };
-      atual.value += 1;
-      contagem.set(chave, atual);
+      if (!slug) {
+        semTurma += 1;
+        return;
+      }
+      contagem.set(slug, (contagem.get(slug) || 0) + 1);
     });
+
+    // Parte das turmas cadastradas, para que as vazias também apareçam.
+    const cadastradas = (row.classGroups || []).map((g) => ({
+      slug: g.slug,
+      name: g.name,
+      period: g.period || null,
+      value: contagem.get(g.slug) || 0,
+    }));
+
+    // Turmas que só existem no vínculo dos assistidos (ex.: renomeadas depois).
+    const conhecidas = new Set(cadastradas.map((t) => t.slug));
+    const orfas = [...contagem.entries()]
+      .filter(([slug]) => !conhecidas.has(slug))
+      .map(([slug, value]) => ({ slug, name: slug, period: null, value, orfa: true }));
+
+    const turmas = [...cadastradas, ...orfas].sort(
+      (a, b) => b.value - a.value || a.name.localeCompare(b.name, 'pt-BR')
+    );
+
+    return {
+      id: row.program?.id,
+      code: row.program?.code || '',
+      name: row.program?.name || row.program?.code || 'Unidade',
+      total: (row.students || []).length,
+      semTurma,
+      turmas,
+    };
   });
 
-  const ordenadas = [...contagem.values()].sort((a, b) => b.value - a.value);
-  if (ordenadas.length <= topN + 1) return ordenadas;
+  const maxValor = unidades.reduce(
+    (max, u) => u.turmas.reduce((m, t) => Math.max(m, t.value), max),
+    0
+  );
 
-  const principais = ordenadas.slice(0, topN);
-  const restantes = ordenadas.slice(topN);
-  const total = restantes.reduce((soma, item) => soma + item.value, 0);
-
-  return [
-    ...principais,
-    { name: `Outras ${restantes.length} turmas`, value: total, agrupado: true },
-  ];
+  return {
+    unidades,
+    maxValor,
+    totalTurmas: unidades.reduce((soma, u) => soma + u.turmas.length, 0),
+    totalSemTurma: unidades.reduce((soma, u) => soma + u.semTurma, 0),
+  };
 }
 
 // Novos cadastros dentro do intervalo (usa created_at dos estudantes).
