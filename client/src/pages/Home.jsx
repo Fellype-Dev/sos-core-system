@@ -12,17 +12,12 @@ import classGroupService from '../services/classGroupService';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/card';
 import DashboardFilters from '../components/DashboardFilters';
 import DeltaBadge from '../components/DeltaBadge';
+import TurmaDashboard from '../components/TurmaDashboard';
 import {
   PERIOD_PRESETS, getPresetRange, getPreviousRange, sessionInRange,
   aggregateMetrics, buildTrend, countNewStudents, bucketLabel,
-  buildTurmaDistribution, TURMA_COR, TURMA_COR_NEUTRA,
+  buildTurmaDashboard,
 } from '../lib/analytics';
-
-/** Nomes longos de turma quebram o eixo; o valor completo fica na dica de contexto. */
-const encurtarRotulo = (texto) => {
-  const t = String(texto || '');
-  return t.length > 26 ? `${t.slice(0, 25)}…` : t;
-};
 
 const COLORS = {
   primary: '#3e4095',
@@ -157,7 +152,7 @@ function Home() {
   const trendData = useMemo(() => buildTrend(filteredSessions, range), [filteredSessions, range]);
 
   // Distribuição por turma (cadastros atuais das unidades em foco)
-  const turmaData = useMemo(() => buildTurmaDistribution(selectedUnits), [selectedUnits]);
+  const turmaData = useMemo(() => buildTurmaDashboard(selectedUnits), [selectedUnits]);
 
   // Distribuição por período (manhã/tarde)
   const periodData = useMemo(() => {
@@ -368,6 +363,25 @@ function Home() {
         </Card>
       )}
 
+      {/* Usuários por turma — todas as turmas, agrupadas por unidade */}
+      {turmaData.totalTurmas > 0 && (
+        <Card className="border-slate-100 shadow-lg shadow-slate-100/30 bg-white rounded-2xl overflow-hidden">
+          <CardHeader className="border-b border-slate-100/50 pb-4">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-indigo-600" />
+              <CardTitle className="text-base font-bold text-slate-900">Usuários por Turma</CardTitle>
+            </div>
+            <CardDescription className="text-xs text-slate-400">
+              Todas as {turmaData.totalTurmas} turmas, por unidade, da maior para a menor.
+              A largura da barra é comparável entre as unidades.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-6">
+            <TurmaDashboard dados={turmaData} />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Distribution charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Status de frequência */}
@@ -405,55 +419,6 @@ function Home() {
           </Card>
         )}
 
-        {/* Usuários por turma */}
-        {turmaData.length > 0 && (
-          <Card className="border-slate-100 shadow-lg shadow-slate-100/30 bg-white rounded-2xl overflow-hidden">
-            <CardHeader className="border-b border-slate-100/50 pb-4">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="h-5 w-5 text-indigo-600" />
-                <CardTitle className="text-base font-bold text-slate-900">Usuários por Turma</CardTitle>
-              </div>
-              <CardDescription className="text-xs text-slate-400">
-                Participantes cadastrados por turma, da maior para a menor
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-6">
-              <ResponsiveContainer width="100%" height={Math.max(200, turmaData.length * 30 + 24)}>
-                <BarChart data={turmaData} layout="vertical" margin={{ top: 4, right: 44, bottom: 4, left: 4 }}>
-                  <CartesianGrid horizontal={false} stroke="#f1f5f9" />
-                  <XAxis type="number" hide />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    width={168}
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fontSize: 11, fill: '#475569' }}
-                    tickFormatter={encurtarRotulo}
-                  />
-                  <Tooltip
-                    cursor={{ fill: '#f8fafc' }}
-                    formatter={(value) => [`${value} ${value === 1 ? 'usuário' : 'usuários'}`, '']}
-                    contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: 12 }}
-                  />
-                  <Bar dataKey="value" barSize={16} radius={[0, 4, 4, 0]}>
-                    {turmaData.map((entry) => (
-                      <Cell
-                        key={entry.name}
-                        fill={entry.semTurma || entry.agrupado ? TURMA_COR_NEUTRA : TURMA_COR}
-                      />
-                    ))}
-                    <LabelList
-                      dataKey="value"
-                      position="right"
-                      style={{ fontSize: 11, fontWeight: 700, fill: '#334155' }}
-                    />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Distribuição por período */}
         {periodData.length > 0 && (
