@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  PieChart, Pie, BarChart, Bar, ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
+  PieChart, Pie, BarChart, Bar, ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LabelList
 } from 'recharts';
 import { FileSpreadsheet, FileText, Sparkles, Filter, CheckCircle, ShieldAlert, Clock, Building, BarChart3, PieChart as PieIcon, Info, RefreshCw, Activity, LayoutGrid, Users, TrendingUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -18,7 +18,14 @@ import DeltaBadge from '../components/DeltaBadge';
 import {
   PERIOD_PRESETS, getPresetRange, getPreviousRange, sessionInRange,
   aggregateMetrics, buildTrend, bucketLabel,
+  buildTurmaDistribution, TURMA_COR, TURMA_COR_NEUTRA,
 } from '../lib/analytics';
+
+/** Nomes longos de turma quebram o eixo; o valor completo fica na dica de contexto. */
+const encurtarRotulo = (texto) => {
+  const t = String(texto || '');
+  return t.length > 24 ? `${t.slice(0, 23)}…` : t;
+};
 import { loadImageDataURL, drawReportHeader, drawReportFooter, SOS_LOGO_SRC } from '../lib/pdfBranding';
 
 const COLORS = {
@@ -289,16 +296,11 @@ function Reports() {
 
   const trendData = useMemo(() => buildTrend(filteredSessions, range), [filteredSessions, range]);
 
-  const turmaData = useMemo(() => {
-    const byTurma = {};
-    selectedUnits.forEach((row) => {
-      (row.students || []).forEach((student) => {
-        const t = student.class_group || 'Sem turma';
-        byTurma[t] = (byTurma[t] || 0) + 1;
-      });
-    });
-    return Object.entries(byTurma).map(([name, value]) => ({ name, value }));
-  }, [selectedUnits]);
+  // No PDF cabem menos linhas que no painel: agrupa a partir da décima turma.
+  const turmaData = useMemo(
+    () => buildTurmaDistribution(selectedUnits, { topN: 10 }),
+    [selectedUnits]
+  );
 
   const periodData = useMemo(() => {
     const byPeriod = {};
@@ -1138,16 +1140,38 @@ function Reports() {
                           <BarChart3 className="h-4 w-4 text-indigo-500" />
                           Usuários por Turma
                         </h4>
-                        <ResponsiveContainer width="100%" height={240}>
-                          <PieChart>
-                            <Pie isAnimationActive={!isCapturing} data={turmaData} dataKey="value" nameKey="name" outerRadius={75} label={({ name, value }) => `${name}: ${value}`}>
-                              {turmaData.map((entry, index) => (
-                                <Cell key={entry.name} fill={PALETTE[index % PALETTE.length]} />
+                        <ResponsiveContainer width="100%" height={Math.max(180, turmaData.length * 26 + 20)}>
+                          <BarChart data={turmaData} layout="vertical" margin={{ top: 4, right: 40, bottom: 4, left: 4 }}>
+                            <CartesianGrid horizontal={false} stroke="#f1f5f9" />
+                            <XAxis type="number" hide />
+                            <YAxis
+                              type="category"
+                              dataKey="name"
+                              width={150}
+                              tickLine={false}
+                              axisLine={false}
+                              tick={{ fontSize: 10, fill: '#475569' }}
+                              tickFormatter={encurtarRotulo}
+                            />
+                            <Tooltip
+                              cursor={{ fill: '#f8fafc' }}
+                              formatter={(value) => [`${value} ${value === 1 ? 'usuário' : 'usuários'}`, '']}
+                              contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: 12 }}
+                            />
+                            <Bar dataKey="value" barSize={14} radius={[0, 4, 4, 0]} isAnimationActive={!isCapturing}>
+                              {turmaData.map((entry) => (
+                                <Cell
+                                  key={entry.name}
+                                  fill={entry.semTurma || entry.agrupado ? TURMA_COR_NEUTRA : TURMA_COR}
+                                />
                               ))}
-                            </Pie>
-                            <Tooltip />
-                            <Legend wrapperStyle={{ fontSize: 10 }} />
-                          </PieChart>
+                              <LabelList
+                                dataKey="value"
+                                position="right"
+                                style={{ fontSize: 10, fontWeight: 700, fill: '#334155' }}
+                              />
+                            </Bar>
+                          </BarChart>
                         </ResponsiveContainer>
                       </div>
                     )}
