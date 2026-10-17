@@ -22,8 +22,8 @@ function TurmaDashboard({ dados, compacto = false }) {
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
           <p className="text-xs text-amber-900">
             <span className="font-bold">{totalSemTurma}</span>
-            {totalSemTurma === 1 ? ' usuário sem turma' : ' usuários sem turma'} vinculada.
-            <span className="text-amber-700"> O vínculo é feito na tela Turmas.</span>
+            {totalSemTurma === 1 ? ' usuário sem grupo' : ' usuários sem grupo'} vinculado.
+            <span className="text-amber-700"> O vínculo é feito na tela Grupos.</span>
           </p>
         </div>
       )}
@@ -46,8 +46,8 @@ function TurmaDashboard({ dados, compacto = false }) {
                 <div>
                   <h4 className="text-sm font-bold text-slate-900">{unidade.name}</h4>
                   <p className="text-[11px] text-slate-400">
-                    {unidade.turmas.length} turmas · {comTurma} em turma
-                    {unidade.semTurma > 0 && ` · ${unidade.semTurma} sem turma`}
+                    {unidade.turmas.length} grupos · {comTurma} em grupo
+                    {unidade.semTurma > 0 && ` · ${unidade.semTurma} sem grupo`}
                   </p>
                 </div>
                 <span className="flex items-center gap-1 text-sm font-extrabold text-slate-900 tabular-nums">

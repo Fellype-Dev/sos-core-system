@@ -2,6 +2,7 @@
 
 export const initialForm = () => ({
   full_name: '',
+  social_name: '',
   birth_date: '',
   nis_user: '',
   color: '',
@@ -46,6 +47,7 @@ export const initialForm = () => ({
   sisc_link_date: '',
   sisc_group: '',
   advisor_notes: '',
+  technician_notes: '',
   program_id: '',
   // Somente leitura no wizard: a turma é atribuída na tela de Turmas.
   // Fica aqui apenas para comparar com o grupo do SISC.
@@ -115,6 +117,59 @@ export function hasSiscMismatch(student) {
   return sisc !== sos;
 }
 
+/** Idade em anos completos na data de hoje. Devolve null sem data de nascimento. */
+export function calcularIdade(birthDate) {
+  const iso = String(birthDate || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  const [ano, mes, dia] = iso.split('-').map(Number);
+  const hoje = new Date();
+  let idade = hoje.getFullYear() - ano;
+  const aniversarioPassou =
+    hoje.getMonth() + 1 > mes || (hoje.getMonth() + 1 === mes && hoje.getDate() >= dia);
+  if (!aniversarioPassou) idade -= 1;
+  return idade >= 0 && idade < 130 ? idade : null;
+}
+
+/** Faixas etárias do SCFV, usadas no filtro da listagem. */
+export const FAIXAS_ETARIAS = [
+  { value: '0-6', label: '0 a 6 anos', min: 0, max: 6 },
+  { value: '7-14', label: '7 a 14 anos', min: 7, max: 14 },
+  { value: '15-17', label: '15 a 17 anos', min: 15, max: 17 },
+  { value: '18-29', label: '18 a 29 anos', min: 18, max: 29 },
+  { value: '30-59', label: '30 a 59 anos', min: 30, max: 59 },
+  { value: '60+', label: '60 anos ou mais', min: 60, max: 200 },
+];
+
+export const MESES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+/** Mês de aniversário (1 a 12) ou null quando não há data de nascimento. */
+export function mesDeAniversario(birthDate) {
+  const iso = String(birthDate || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  return Number(iso.slice(5, 7));
+}
+
+/**
+ * Motivos de desligamento do SCFV.
+ * Lista provisória, a confirmar com a coordenação do SOS — "Outro" cobre o que
+ * não estiver aqui, com a explicação no campo de observação.
+ */
+export const MOTIVOS_DESLIGAMENTO = [
+  'Mudança de endereço ou de cidade',
+  'Transferência para outra unidade',
+  'Incompatibilidade de horário',
+  'Conclusão da faixa etária',
+  'Faltas consecutivas / abandono',
+  'Desinteresse da família',
+  'Ingresso em escola, curso ou trabalho',
+  'Problema de saúde',
+  'Óbito',
+  'Outro',
+];
+
 export const COLOR_OPTIONS = ['Branca', 'Preta', 'Parda', 'Amarela', 'Indigena', 'Outro'];
 export const SCHOOL_SHIFT_OPTIONS = ['Manha', 'Tarde', 'Noite', 'Integral', 'Outro'];
 export const CRAS_STATUS_OPTIONS = ['prioritario', 'nao_prioritario'];
@@ -145,6 +200,7 @@ export function buildStudentPayload(form, canChooseProgram) {
 
   const payload = {
     full_name: form.full_name.trim(),
+    social_name: form.social_name.trim() || null,
     birth_date: form.birth_date || null,
     nis_user: form.nis_user.trim() || null,
     color: form.color || null,
@@ -189,6 +245,7 @@ export function buildStudentPayload(form, canChooseProgram) {
     sisc_link_date: form.sisc_link_date || null,
     sisc_group: form.sisc_group || null,
     advisor_notes: form.advisor_notes.trim() || null,
+    technician_notes: form.technician_notes.trim() || null,
   };
 
   if (canChooseProgram) {
@@ -202,6 +259,7 @@ export function buildStudentPayload(form, canChooseProgram) {
 export function mapStudentToForm(item, fallbackProgramId = '') {
   return {
     full_name: item.full_name || '',
+    social_name: item.social_name || '',
     birth_date: item.birth_date ? String(item.birth_date).slice(0, 10) : '',
     nis_user: item.nis_user || '',
     color: item.color || '',
@@ -246,6 +304,7 @@ export function mapStudentToForm(item, fallbackProgramId = '') {
     sisc_link_date: item.sisc_link_date ? String(item.sisc_link_date).slice(0, 10) : '',
     sisc_group: item.sisc_group || '',
     advisor_notes: item.advisor_notes || '',
+    technician_notes: item.technician_notes || '',
     program_id: item.program_id || item.programs?.id || fallbackProgramId || '',
     class_group: item.class_group || '',
   };

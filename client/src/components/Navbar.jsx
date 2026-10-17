@@ -100,7 +100,7 @@ function Navbar() {
                   : "text-slate-600 hover:text-slate-950 hover:bg-slate-50/50"
               )}
             >
-              Turmas
+              Grupos
             </NavLink>
             <NavLink
               to="/chamada"

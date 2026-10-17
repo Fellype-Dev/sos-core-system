@@ -22,7 +22,7 @@ function isUuid(value) {
 }
 
 function turmaLabel(groups, slug) {
-  if (!slug) return 'Sem Turma';
+  if (!slug) return 'Sem Grupo';
   const row = groups.find((g) => g.slug === slug);
   return row ? row.name : slug;
 }
@@ -72,7 +72,7 @@ function TurmasPage() {
           (async () => { if (!cancelled) await loadStudents(); })(),
         ]);
       } catch (err) {
-        if (!cancelled) setError(err?.response?.data?.message || 'Falha ao carregar turmas.');
+        if (!cancelled) setError(err?.response?.data?.message || 'Falha ao carregar grupos.');
       }
     };
     setSelectedClassGroup(null);
@@ -113,11 +113,11 @@ function TurmasPage() {
   const handleAddTurma = async () => {
     const name = newTurmaName.trim();
     if (!name) {
-      setError('Informe o nome da turma.');
+      setError('Informe o nome do grupo.');
       return;
     }
     if (!canManageTurmas) {
-      setError('Selecione a unidade ativa no topo para cadastrar turmas.');
+      setError('Selecione a unidade ativa no topo para cadastrar grupos.');
       return;
     }
 
@@ -136,11 +136,11 @@ function TurmasPage() {
       setNewTurmaPeriod('manha');
       setNewTurmaDays([]);
       setNewTurmaAgeRange('');
-      setSuccess('Turma cadastrada com sucesso.');
+      setSuccess('Grupo cadastrado com sucesso.');
       await loadGroups();
       await loadStudents();
     } catch (err) {
-      setError(err?.response?.data?.message || 'Não foi possível criar a turma.');
+      setError(err?.response?.data?.message || 'Não foi possível criar o grupo.');
     } finally {
       setTurmaBusy(false);
     }
@@ -159,14 +159,14 @@ function TurmasPage() {
     setSuccess('');
     try {
       await classGroupService.remove(row.id);
-      setSuccess('Turma removida com sucesso.');
+      setSuccess('Grupo removido com sucesso.');
       if (selectedClassGroup?.id === row.id) {
         setSelectedClassGroup(null);
       }
       await loadGroups();
       await loadStudents();
     } catch (err) {
-      setError(err?.response?.data?.message || 'Não foi possível excluir a turma.');
+      setError(err?.response?.data?.message || 'Não foi possível excluir o grupo.');
     } finally {
       setTurmaBusy(false);
     }
@@ -177,7 +177,7 @@ function TurmasPage() {
     setSuccess('');
     try {
       await studentService.update(studentId, { class_group: turmaSlug || null });
-      setSuccess('Atribuição de turma atualizada.');
+      setSuccess('Atribuição de grupo atualizada.');
       await loadStudents();
     } catch (err) {
       setError(err?.response?.data?.message || 'Falha ao atribuir usuário.');
@@ -194,7 +194,7 @@ function TurmasPage() {
             <GraduationCap className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Gestão de Turmas</h1>
+            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Gestão de Grupos</h1>
             <p className="text-slate-500 text-sm mt-0.5">
               As turmas valem para a unidade física selecionada no cabeçalho. Selecione uma turma para gerenciar seus integrantes.
             </p>
@@ -217,9 +217,9 @@ function TurmasPage() {
 
       <Card className="border-slate-100 shadow-xl shadow-slate-100/40 bg-white rounded-2xl overflow-hidden">
         <CardHeader className="pb-3 border-b border-slate-100/50">
-          <CardTitle className="text-base font-bold text-slate-900">Gerenciar Turmas da Unidade</CardTitle>
+          <CardTitle className="text-base font-bold text-slate-900">Gerenciar Grupos da Unidade</CardTitle>
           <CardDescription className="text-xs text-slate-400">
-            Crie turmas e vincule os usuários da unidade ativa.
+            Crie grupos e vincule os usuários da unidade ativa.
           </CardDescription>
         </CardHeader>
 
@@ -227,21 +227,21 @@ function TurmasPage() {
           {!canManageTurmas ? (
             <div className="p-4 rounded-xl bg-amber-50 border border-amber-100 text-xs font-bold text-amber-700 flex items-center gap-2">
               <Info className="h-4 w-4 shrink-0" />
-              <span>Selecione uma unidade no cabeçalho superior para gerenciar turmas.</span>
+              <span>Selecione uma unidade no cabeçalho superior para gerenciar grupos.</span>
             </div>
           ) : (
             <div className="space-y-6">
               {/* Add new turma form */}
               <div className="bg-slate-50/50 border border-slate-200/60 rounded-xl p-6 space-y-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">Criar Nova Turma</h4>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">Criar Novo Grupo</h4>
                 <div className="flex flex-wrap gap-4 items-end">
                   <div className="flex-1 min-w-[200px] space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">Nome da Turma</label>
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">Nome do Grupo</label>
                     <input
                       type="text"
                       value={newTurmaName}
                       onChange={(e) => setNewTurmaName(e.target.value)}
-                      placeholder="Nome da nova turma (ex.: Turma C)"
+                      placeholder="Nome do novo grupo (ex.: Grupo C)"
                       maxLength={80}
                       disabled={turmaBusy}
                       className="w-full h-10 px-3.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all"
@@ -308,16 +308,16 @@ function TurmasPage() {
                     className="inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
                   >
                     <Plus className="h-4 w-4" />
-                    Adicionar Turma
+                    Adicionar Grupo
                   </button>
                 </div>
               </div>
 
               {/* Turmas List */}
               <div className="space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5">Selecione uma Turma para Gerenciar os Alunos</h4>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5">Selecione um Grupo para Gerenciar os Usuários</h4>
                 {classGroupsList.length === 0 ? (
-                  <p className="text-xs text-slate-400 font-semibold italic">Nenhuma turma cadastrada para esta unidade. Adicione uma no painel acima.</p>
+                  <p className="text-xs text-slate-400 font-semibold italic">Nenhum grupo cadastrado para esta unidade. Adicione um no painel acima.</p>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {classGroupsList.map((t) => {
@@ -377,7 +377,7 @@ function TurmasPage() {
                             onClick={(e) => { e.stopPropagation(); handleRemoveTurma(t); }}
                             disabled={turmaBusy}
                             className="inline-flex items-center justify-center p-2 rounded-lg text-red-500 hover:bg-red-50 border border-slate-100 hover:border-red-100 transition-colors disabled:opacity-30 cursor-pointer shrink-0"
-                            title="Excluir turma"
+                            title="Excluir grupo"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -394,9 +394,9 @@ function TurmasPage() {
                   <div className="flex justify-between items-center">
                     <div>
                       <h4 className="text-sm font-extrabold text-slate-900 tracking-tight">
-                        Gerenciar Alunos da Turma: <span className="text-indigo-600">{selectedClassGroup.name}</span>
+                        Gerenciar Usuários do Grupo: <span className="text-indigo-600">{selectedClassGroup.name}</span>
                       </h4>
-                      <p className="text-xs text-slate-400 mt-0.5">Adicione ou remova integrantes desta turma usando os painéis abaixo.</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Adicione ou remova integrantes deste grupo usando os painéis abaixo.</p>
                     </div>
                     <button
                       type="button"
@@ -413,13 +413,13 @@ function TurmasPage() {
                       <div className="flex justify-between items-center">
                         <h5 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
                           <Users className="h-3.5 w-3.5" />
-                          <span>Alunos Vinculados ({currentTurmaStudents.length})</span>
+                          <span>Usuários Vinculados ({currentTurmaStudents.length})</span>
                         </h5>
                       </div>
 
                       {currentTurmaStudents.length === 0 ? (
                         <div className="text-center py-12 text-slate-400 font-medium text-xs bg-white border border-dashed border-slate-200 rounded-xl">
-                          Nenhum aluno cadastrado nesta turma ainda.
+                          Nenhum usuário cadastrado neste grupo ainda.
                         </div>
                       ) : (
                         <div className="max-h-80 overflow-y-auto border border-slate-150 rounded-xl bg-white divide-y divide-slate-100 shadow-sm no-scrollbar">
@@ -451,7 +451,7 @@ function TurmasPage() {
                     <div className="border border-slate-200/80 rounded-2xl p-5 bg-slate-50/20 space-y-3">
                       <h5 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
                         <UserPlus className="h-3.5 w-3.5" />
-                        <span>Adicionar Alunos à Turma</span>
+                        <span>Adicionar Usuários ao Grupo</span>
                       </h5>
 
                       <div className="relative">
@@ -468,8 +468,8 @@ function TurmasPage() {
                       {searchQueryResults.length === 0 ? (
                         <div className="text-center py-12 text-slate-400 font-medium text-xs bg-white border border-dashed border-slate-200 rounded-xl">
                           {assignmentSearchQuery
-                            ? 'Nenhum aluno encontrado para os termos digitados.'
-                            : 'Todos os alunos estão vinculados a alguma turma.'}
+                            ? 'Nenhum usuário encontrado para os termos digitados.'
+                            : 'Todos os usuários estão vinculados a algum grupo.'}
                         </div>
                       ) : (
                         <div className="max-h-80 overflow-y-auto border border-slate-150 rounded-xl bg-white divide-y divide-slate-100 shadow-sm no-scrollbar">
@@ -480,7 +480,7 @@ function TurmasPage() {
                                 <div className="min-w-0">
                                   <p className="text-xs font-bold text-slate-800 truncate">{s.full_name}</p>
                                   <p className="text-[10px] text-slate-400 font-bold mt-0.5">
-                                    {s.class_group ? `Turma atual: ${turmaLabel(classGroupsList, s.class_group)}` : 'Sem turma vinculada'}
+                                    {s.class_group ? `Grupo atual: ${turmaLabel(classGroupsList, s.class_group)}` : 'Sem grupo vinculado'}
                                   </p>
                                 </div>
                               </div>
@@ -500,7 +500,7 @@ function TurmasPage() {
                 </div>
               ) : (
                 <div className="text-center py-12 text-slate-400 font-medium text-xs border border-dashed border-slate-200 rounded-2xl bg-slate-50/20">
-                  Selecione uma turma ativa acima para carregar o painel de atribuição de alunos.
+                  Selecione um grupo ativo acima para carregar o painel de atribuição de usuários.
                 </div>
               )}
             </div>

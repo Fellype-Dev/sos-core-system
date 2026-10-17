@@ -4,6 +4,7 @@ import useAuth from '../hooks/useAuth';
 import studentService from '../services/studentService';
 import attendanceService from '../services/attendanceService';
 import classGroupService from '../services/classGroupService';
+import { buildTurmaLabels } from '../lib/turmaLabels';
 import { cn } from '../lib/utils';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -24,9 +25,8 @@ function formatDateBR(iso) {
 }
 
 function turmaLabel(groups, slug) {
-  if (!slug) return 'Sem turma';
-  const row = groups.find((g) => g.slug === slug);
-  return row ? row.name : slug;
+  if (!slug) return 'Sem grupo';
+  return buildTurmaLabels(groups).get(slug) || slug;
 }
 
 function getRecordDisplayName(record) {
@@ -54,6 +54,9 @@ function Attendance() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [classGroup, setClassGroup] = useState('A');
+  // 'sos' usa o grupo da unidade; 'sisc', o grupo informado no SISC no cadastro.
+  const [listType, setListType] = useState('sos');
+  const [siscGroups, setSiscGroups] = useState([]);
   const [period, setPeriod] = useState('manha');
   const [activeTab, setActiveTab] = useState('marking');
   const [historySessions, setHistorySessions] = useState([]);
@@ -108,6 +111,43 @@ function Attendance() {
     };
   }, [selectedProgramId]);
 
+  // Grupos do SISC: não há cadastro próprio deles, então são os valores
+  // distintos informados no cadastro dos usuários da unidade.
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSiscGroups = async () => {
+      if (!selectedProgramId || !isUuid(selectedProgramId)) {
+        setSiscGroups([]);
+        return;
+      }
+      try {
+        const res = await studentService.getAll({ program_id: selectedProgramId });
+        if (cancelled) return;
+        const valores = [...new Set(
+          (res.data || []).map((s) => String(s.sisc_group || '').trim()).filter(Boolean)
+        )].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+        setSiscGroups(valores);
+      } catch {
+        if (!cancelled) setSiscGroups([]);
+      }
+    };
+
+    loadSiscGroups();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProgramId]);
+
+  // Rótulos sem repetição: grupos de mesmo nome ganham período e dias.
+  const turmaLabels = useMemo(() => buildTurmaLabels(turmaOptions), [turmaOptions]);
+
+  // Ao trocar de lista, o grupo selecionado precisa existir na nova.
+  useEffect(() => {
+    const opcoes = listType === 'sisc' ? siscGroups : turmaOptions.map((t) => t.slug);
+    setClassGroup((prev) => (opcoes.includes(prev) ? prev : opcoes[0] || ''));
+  }, [listType, siscGroups, turmaOptions]);
+
   const markStatus = (studentId, status) => {
     setRecords((prev) =>
       prev.map((record) =>
@@ -136,16 +176,27 @@ function Attendance() {
       setSuccess('');
       try {
         const [studentsResponse, attendanceResponse] = await Promise.all([
-          studentService.getAll({ program_id: selectedProgramId, class_group: classGroup }),
+          // Na lista do SISC o filtro é feito aqui, porque a API só sabe filtrar
+          // pelo grupo da unidade.
+          studentService.getAll(
+            listType === 'sisc'
+              ? { program_id: selectedProgramId }
+              : { program_id: selectedProgramId, class_group: classGroup }
+          ),
           attendanceService.getByDate({
             attendance_date: attendanceDate,
             class_group: classGroup,
             period,
             program_id: selectedProgramId,
+            list_type: listType,
           }),
         ]);
 
-        const students = studentsResponse.data || [];
+        const todos = studentsResponse.data || [];
+        const students =
+          listType === 'sisc'
+            ? todos.filter((student) => (student.sisc_group || '') === classGroup)
+            : todos;
         const recordsByStudent = new Map(
           (attendanceResponse.data?.records || []).map((record) => [record.student_id, record.status])
         );
@@ -170,7 +221,7 @@ function Attendance() {
     };
 
     loadStudents();
-  }, [selectedProgramId, attendanceDate, classGroup, period, activeTab]);
+  }, [selectedProgramId, attendanceDate, classGroup, period, activeTab, listType]);
 
   const loadHistory = async () => {
     if (!selectedProgramId) {
@@ -182,7 +233,7 @@ function Attendance() {
     setError('');
     setSuccess('');
     try {
-      const params = { program_id: selectedProgramId };
+      const params = { program_id: selectedProgramId, list_type: listType };
       if (historyDate) {
         params.attendance_date = historyDate;
       }
@@ -266,6 +317,7 @@ function Attendance() {
         class_group: selectedHistoryDetail.session.class_group || '',
         period: selectedHistoryDetail.session.period || '',
         program_id: selectedHistoryDetail.session.program_id,
+        list_type: selectedHistoryDetail.session.list_type || 'sos',
         records: payloadRecords,
       });
 
@@ -287,7 +339,7 @@ function Attendance() {
     if (activeTab === 'history') {
       loadHistory();
     }
-  }, [activeTab, selectedProgramId, historyDate, historyClassGroup]);
+  }, [activeTab, selectedProgramId, historyDate, historyClassGroup, listType]);
 
   const saveAttendance = async () => {
     if (!selectedProgramId) {
@@ -310,13 +362,18 @@ function Attendance() {
         class_group: classGroup,
         period,
         program_id: selectedProgramId,
+        list_type: listType,
         records: filledRecords.map((record) => ({
           student_id: record.id,
           status: record.status,
         })),
       });
 
-      setSuccess('Frequência salva com sucesso.');
+      setSuccess(
+        listType === 'sisc'
+          ? 'Lista de presença do SISC salva com sucesso.'
+          : 'Frequência salva com sucesso.'
+      );
     } catch (err) {
       setError(err?.response?.data?.message || 'Falha ao salvar frequencia.');
     } finally {
@@ -336,7 +393,7 @@ function Attendance() {
             </div>
             <div>
               <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Registro de Frequência</h1>
-              <p className="text-slate-500 text-sm mt-0.5">Lançamento diário e histórico das listas de presença das turmas ativas.</p>
+              <p className="text-slate-500 text-sm mt-0.5">Lançamento diário e histórico das listas de presença dos grupos ativos.</p>
             </div>
           </div>
           <div className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-3.5 py-1.5 rounded-full border border-indigo-100 text-xs font-bold w-fit self-start sm:self-auto shrink-0">
@@ -408,17 +465,29 @@ function Attendance() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-0.5">Filtrar por Turma</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-0.5">Filtrar por Lista</label>
+                <select
+                  className="h-10 px-3 w-40 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 bg-white focus:border-indigo-500 focus:ring-indigo-500/20 focus:outline-none transition-all cursor-pointer"
+                  value={listType}
+                  onChange={(event) => setListType(event.target.value)}
+                >
+                  <option value="sos">Grupos do SOS</option>
+                  <option value="sisc">Grupos do SISC</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-0.5">Filtrar por Grupo</label>
                 <select 
                   className="h-10 px-3 w-40 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 bg-white focus:border-indigo-500 focus:ring-indigo-500/20 focus:outline-none transition-all cursor-pointer"
                   value={historyClassGroup} 
                   onChange={(event) => setHistoryClassGroup(event.target.value)}
                 >
-                  <option value="">Todas as turmas</option>
-                  <option value="__none__">Sem turma</option>
+                  <option value="">Todos os grupos</option>
+                  <option value="__none__">Sem grupo</option>
                   {turmaOptions.map((t) => (
                     <option key={t.id} value={t.slug}>
-                      {t.name}
+                      {turmaLabels.get(t.slug) || t.name}
                     </option>
                   ))}
                 </select>
@@ -456,7 +525,8 @@ function Attendance() {
                       <thead className="bg-slate-50/50 border-b border-slate-100">
                         <tr>
                           <th className="px-5 py-3.5 font-bold uppercase tracking-wider text-slate-400">Data</th>
-                          <th className="px-5 py-3.5 font-bold uppercase tracking-wider text-slate-400">Turma</th>
+                          <th className="px-5 py-3.5 font-bold uppercase tracking-wider text-slate-400">Lista</th>
+                          <th className="px-5 py-3.5 font-bold uppercase tracking-wider text-slate-400">Grupo</th>
                           <th className="px-5 py-3.5 font-bold uppercase tracking-wider text-slate-400">Período</th>
                           <th className="px-5 py-3.5 font-bold uppercase tracking-wider text-slate-400">Criado em</th>
                           <th className="px-5 py-3.5 font-bold uppercase tracking-wider text-slate-400">Lançado Por</th>
@@ -467,6 +537,16 @@ function Attendance() {
                         {historySessions.map((session) => (
                           <tr key={session.id} className="hover:bg-slate-50/30 transition-colors">
                             <td className="px-5 py-4 font-bold text-slate-800">{formatDateBR(session.attendance_date)}</td>
+                            <td className="px-5 py-4">
+                              <span className={cn(
+                                "inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold border",
+                                session.list_type === 'sisc'
+                                  ? "bg-violet-50 text-violet-700 border-violet-100"
+                                  : "bg-slate-50 text-slate-600 border-slate-200"
+                              )}>
+                                {session.list_type === 'sisc' ? 'SISC' : 'SOS'}
+                              </span>
+                            </td>
                             <td className="px-5 py-4 font-bold text-slate-600">{turmaLabel(turmaOptions, session.class_group)}</td>
                             <td className="px-5 py-4">
                               <span className={cn(
@@ -674,18 +754,38 @@ function Attendance() {
             {/* Lançar Lista de Presença - filtros */}
             <div className="flex flex-wrap items-end gap-4 p-5 rounded-2xl bg-slate-50 border border-slate-200/60 shadow-sm">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-0.5">Turma</label>
-                <select 
-                  className="h-10 px-3 w-40 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 bg-white focus:border-indigo-500 focus:ring-indigo-500/20 focus:outline-none transition-all cursor-pointer"
-                  value={classGroup} 
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-0.5">Lista</label>
+                <select
+                  className="h-10 px-3 w-44 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 bg-white focus:border-indigo-500 focus:ring-indigo-500/20 focus:outline-none transition-all cursor-pointer"
+                  value={listType}
+                  onChange={(event) => setListType(event.target.value)}
+                >
+                  <option value="sos">Grupos do SOS</option>
+                  <option value="sisc">Grupos do SISC</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-0.5">Grupo</label>
+                <select
+                  className="h-10 px-3 w-44 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 bg-white focus:border-indigo-500 focus:ring-indigo-500/20 focus:outline-none transition-all cursor-pointer"
+                  value={classGroup}
                   onChange={(event) => setClassGroup(event.target.value)}
                 >
-                  {turmaOptions.length === 0 ? (
+                  {listType === 'sisc' ? (
+                    siscGroups.length === 0 ? (
+                      <option value="">Nenhum grupo do SISC cadastrado</option>
+                    ) : (
+                      siscGroups.map((grupo) => (
+                        <option key={grupo} value={grupo}>{turmaLabel(turmaOptions, grupo)}</option>
+                      ))
+                    )
+                  ) : turmaOptions.length === 0 ? (
                     <option value={classGroup}>Carregando...</option>
                   ) : (
                     turmaOptions.map((t) => (
                       <option key={t.id} value={t.slug}>
-                        {t.name}
+                        {turmaLabels.get(t.slug) || t.name}
                       </option>
                     ))
                   )}
@@ -717,8 +817,14 @@ function Attendance() {
             {/* Attendance Marking Table */}
             <Card className="border-slate-100 shadow-xl shadow-slate-100/40 bg-white rounded-2xl overflow-hidden">
               <CardHeader className="pb-3 border-b border-slate-100/50">
-                <CardTitle className="text-base font-bold text-slate-900">Lista de Presença</CardTitle>
-                <CardDescription className="text-xs text-slate-400">Marque a presença ou falta dos participantes correspondentes.</CardDescription>
+                <CardTitle className="text-base font-bold text-slate-900">
+                  {listType === 'sisc' ? 'Lista de Presença do SISC' : 'Lista de Presença'}
+                </CardTitle>
+                <CardDescription className="text-xs text-slate-400">
+                  {listType === 'sisc'
+                    ? 'Participantes do grupo conforme informado no SISC. É uma lista separada da lista do SOS.'
+                    : 'Marque a presença ou falta dos participantes correspondentes.'}
+                </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 {loading ? (

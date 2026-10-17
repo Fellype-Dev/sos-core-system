@@ -7,6 +7,7 @@ import useAuth from '../../hooks/useAuth';
 import studentService from '../../services/studentService';
 import programService from '../../services/programService';
 import classGroupService from '../../services/classGroupService';
+import { buildTurmaLabels } from '../../lib/turmaLabels';
 import { Card, CardContent } from '../../components/ui/card';
 import {
   initialForm, buildStudentPayload, mapStudentToForm, hasSiscMismatch,
@@ -30,7 +31,7 @@ function StudentFormPage() {
   const [form, setForm] = useState(() => ({ ...initialForm(), program_id: selectedProgramId || '' }));
   const [step, setStep] = useState(0);
   const [programs, setPrograms] = useState([]);
-  // Turmas da unidade: alimentam o seletor de grupo do SISC.
+  // Grupos da unidade: alimentam o seletor de grupo do SISC.
   const [classGroups, setClassGroups] = useState([]);
   const [loading, setLoading] = useState(editing);
   const [submitting, setSubmitting] = useState(false);
@@ -87,9 +88,12 @@ function StudentFormPage() {
     return program.location ? `${program.name} · ${program.location}` : program.name;
   }, [programs, selectedProgramId]);
 
+  // Grupos de mesmo nome recebem período e dias para não se confundirem.
+  const turmaLabels = useMemo(() => buildTurmaLabels(classGroups), [classGroups]);
+
   const turmaLabelBySlug = (slug) => {
     if (!slug) return null;
-    return classGroups.find((g) => g.slug === slug)?.name || slug;
+    return turmaLabels.get(slug) || slug;
   };
 
   // Grupo do SISC salvo que não existe (mais) como turma da unidade: mantém a opção
@@ -179,7 +183,10 @@ function StudentFormPage() {
     return true;
   };
 
-  const goNext = () => {
+  const goNext = (event) => {
+    // Trava de segurança: impede que o clique vire envio do formulário ao
+    // avançar para a última etapa, onde o botão passa a ser o de salvar.
+    event?.preventDefault();
     setError('');
     if (step === 0 && !form.full_name.trim()) {
       setError('Informe o nome completo do usuário.');
@@ -197,6 +204,12 @@ function StudentFormPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    // Só a última etapa grava. Enter em um campo ou qualquer envio acidental
+    // nas etapas anteriores apenas avança, em vez de salvar pela metade.
+    if (step !== STEPS.length - 1) {
+      goNext();
+      return;
+    }
     setError('');
     if (!validateBeforeSave()) return;
 
@@ -310,6 +323,10 @@ function StudentFormPage() {
                     <input id="full_name" type="text" name="full_name" placeholder="Nome completo" value={form.full_name} onChange={onChange} required className="w-full h-10 px-3.5 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all" />
                   </div>
                   <div className="space-y-1.5">
+                    <label htmlFor="social_name" className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">Nome Social</label>
+                    <input id="social_name" type="text" name="social_name" placeholder="Nome pelo qual é chamado(a)" value={form.social_name} onChange={onChange} className="w-full h-10 px-3.5 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all" />
+                  </div>
+                  <div className="space-y-1.5">
                     <label htmlFor="birth_date" className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">Data de Nascimento</label>
                     <input id="birth_date" type="date" name="birth_date" value={form.birth_date} onChange={onChange} className="w-full h-10 px-3.5 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all cursor-pointer" />
                   </div>
@@ -325,8 +342,8 @@ function StudentFormPage() {
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label htmlFor="cpf_cns" className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">CPF / Cartão SUS</label>
-                    <input id="cpf_cns" type="text" name="cpf_cns" placeholder="Identificação fiscal ou SUS" value={form.cpf_cns} onChange={onChange} className="w-full h-10 px-3.5 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all" />
+                    <label htmlFor="cpf_cns" className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">CPF</label>
+                    <input id="cpf_cns" type="text" name="cpf_cns" placeholder="Somente números" value={form.cpf_cns} onChange={onChange} className="w-full h-10 px-3.5 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all" />
                   </div>
                   <div className="space-y-1.5">
                     <label htmlFor="shoe_size" className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">N° Calçado</label>
@@ -604,6 +621,10 @@ function StudentFormPage() {
                       <label htmlFor="cras_technician" className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">Técnico Responsável</label>
                       <input id="cras_technician" type="text" name="cras_technician" placeholder="Nome do assistente social ou técnico" value={form.cras_technician} onChange={onChange} className="w-full h-10 px-3.5 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all" />
                     </div>
+                    <div className="space-y-1.5 col-span-full">
+                      <label htmlFor="technician_notes" className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">Observação do Técnico</label>
+                      <textarea id="technician_notes" name="technician_notes" placeholder="Acompanhamento técnico, encaminhamentos, situação da família..." value={form.technician_notes} onChange={onChange} rows={4} className="w-full px-3 py-2 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all resize-y min-h-[5.5rem]" />
+                    </div>
                   </div>
                 </div>
 
@@ -675,19 +696,19 @@ function StudentFormPage() {
                       <select id="sisc_group" name="sisc_group" value={form.sisc_group} onChange={onChange} className="w-full h-10 px-3.5 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all cursor-pointer">
                         <option value="">Não informado</option>
                         {classGroups.map((group) => (
-                          <option key={group.id} value={group.slug}>{group.name}</option>
+                          <option key={group.id} value={group.slug}>{turmaLabels.get(group.slug) || group.name}</option>
                         ))}
                         {siscGroupOutsideList && (
-                          <option value={form.sisc_group}>{form.sisc_group} (turma não encontrada)</option>
+                          <option value={form.sisc_group}>{form.sisc_group} (grupo não encontrado)</option>
                         )}
                       </select>
                     </div>
                     <div className="space-y-1.5">
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">Turma no SOS</span>
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">Grupo no SOS</span>
                       <div className="w-full h-10 px-3.5 flex items-center text-xs font-bold text-slate-500 bg-slate-100/70 border border-slate-200 rounded-lg">
-                        {turmaLabelBySlug(form.class_group) || 'Sem turma vinculada'}
+                        {turmaLabelBySlug(form.class_group) || 'Sem grupo vinculado'}
                       </div>
-                      <p className="text-[10px] font-semibold text-slate-400 ml-0.5">Atribuída na tela de Turmas.</p>
+                      <p className="text-[10px] font-semibold text-slate-400 ml-0.5">Atribuído na tela de Grupos.</p>
                     </div>
                   </div>
 
@@ -716,8 +737,12 @@ function StudentFormPage() {
                 >
                   <ArrowLeft className="h-4 w-4" /> {step === 0 ? 'Cancelar' : 'Voltar'}
                 </button>
+                {/* As chaves distintas são necessárias: sem elas o React reaproveita
+                    o mesmo elemento ao trocar de "Próximo" para "Concluir cadastro" e
+                    o clique que avançou a etapa acaba enviando o formulário junto. */}
                 {isLastStep ? (
                   <button
+                    key="concluir"
                     type="submit"
                     disabled={submitting}
                     className="inline-flex items-center gap-1.5 h-10 px-6 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors disabled:opacity-50 shadow-sm cursor-pointer"
@@ -727,6 +752,7 @@ function StudentFormPage() {
                   </button>
                 ) : (
                   <button
+                    key="proximo"
                     type="button"
                     onClick={goNext}
                     className="inline-flex items-center gap-1.5 h-10 px-6 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm cursor-pointer"

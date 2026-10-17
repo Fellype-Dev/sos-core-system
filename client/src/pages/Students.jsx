@@ -4,8 +4,12 @@ import useAuth from '../hooks/useAuth';
 import studentService from '../services/studentService';
 import programService from '../services/programService';
 import classGroupService from '../services/classGroupService';
+import { buildTurmaLabels } from '../lib/turmaLabels';
 import { TURMA_FILTER_ALL } from '../constants/turmas';
-import { hasSiscMismatch, getEnrollmentDate, getTenure } from './students/studentForm';
+import {
+  hasSiscMismatch, getEnrollmentDate, getTenure,
+  calcularIdade, mesDeAniversario, FAIXAS_ETARIAS, MESES, MOTIVOS_DESLIGAMENTO,
+} from './students/studentForm';
 import { exportStudentPdf, exportStudentsWorkbook, studentFileSlug } from '../lib/studentExport';
 import { loadImageDataURL, SOS_LOGO_SRC } from '../lib/pdfBranding';
 import MaskedValue from '../components/MaskedValue';
@@ -50,9 +54,8 @@ function formatDateBR(iso) {
 }
 
 function turmaLabel(groups, slug) {
-  if (!slug) return 'Sem Turma';
-  const row = groups.find((g) => g.slug === slug);
-  return row ? row.name : slug;
+  if (!slug) return 'Sem Grupo';
+  return buildTurmaLabels(groups).get(slug) || slug;
 }
 
 function Students() {
@@ -71,6 +74,10 @@ function Students() {
   const [filterClassGroup, setFilterClassGroup] = useState(TURMA_FILTER_ALL);
   // 'active' | 'inactive' | 'all' — inativos ficam fora da lista do dia a dia, mas seguem acessiveis.
   const [filterStatus, setFilterStatus] = useState('active');
+  const [filterFaixaEtaria, setFilterFaixaEtaria] = useState('all');
+  const [filterMesAniversario, setFilterMesAniversario] = useState('all');
+  const [desligamento, setDesligamento] = useState(null);
+  const [salvandoDesligamento, setSalvandoDesligamento] = useState(false);
   // Isola os cadastros cuja turma no SOS diverge do grupo informado no SISC.
   const [onlySiscMismatch, setOnlySiscMismatch] = useState(false);
   // Logo do SOS embutida na ficha em PDF.
@@ -143,8 +150,9 @@ function Students() {
     const q = String(searchQuery || '').trim().toLowerCase();
     return students.filter((s) => {
       const name = String(s.full_name || '').toLowerCase();
+      const social = String(s.social_name || '').toLowerCase();
       const nis = String(s.nis_user || s.enrollment_code || '').toLowerCase();
-      const matchesText = !q || name.includes(q) || nis.includes(q);
+      const matchesText = !q || name.includes(q) || social.includes(q) || nis.includes(q);
       const matchesTurma =
         filterClassGroup === TURMA_FILTER_ALL
           ? true
@@ -155,9 +163,20 @@ function Students() {
       const matchesStatus =
         filterStatus === 'all' ? true : filterStatus === 'inactive' ? !isActive : isActive;
       const matchesSisc = !onlySiscMismatch || hasSiscMismatch(s);
-      return matchesText && matchesTurma && matchesStatus && matchesSisc;
+
+      const idade = calcularIdade(s.birth_date);
+      const faixa = FAIXAS_ETARIAS.find((f) => f.value === filterFaixaEtaria);
+      const matchesFaixa = !faixa || (idade !== null && idade >= faixa.min && idade <= faixa.max);
+
+      const matchesMes =
+        filterMesAniversario === 'all' || mesDeAniversario(s.birth_date) === Number(filterMesAniversario);
+
+      return matchesText && matchesTurma && matchesStatus && matchesSisc && matchesFaixa && matchesMes;
     });
-  }, [students, searchQuery, filterClassGroup, filterStatus, onlySiscMismatch]);
+  }, [
+    students, searchQuery, filterClassGroup, filterStatus,
+    onlySiscMismatch, filterFaixaEtaria, filterMesAniversario,
+  ]);
 
   const inactiveCount = useMemo(
     () => students.filter((s) => s.is_active === false).length,
@@ -167,23 +186,71 @@ function Students() {
   const siscMismatchCount = useMemo(() => students.filter(hasSiscMismatch).length, [students]);
 
 
+  /**
+   * Desligar pede motivo e data; reativar só confirma. O cadastro e o histórico
+   * de frequência são preservados nos dois casos.
+   */
   const onToggleActive = async (item) => {
     const isActive = item.is_active !== false;
-    const message = isActive
-      ? `Desativar "${item.full_name}"?\n\nO cadastro e todo o histórico de frequência são mantidos. O usuário sai das listas ativas e da lista de presença, e pode ser reativado a qualquer momento.`
-      : `Reativar "${item.full_name}"?\n\nO usuário volta a aparecer nas listas ativas e na lista de presença.`;
 
-    if (!window.confirm(message)) {
+    if (isActive) {
+      setDesligamento({
+        student: item,
+        deactivated_at: new Date().toISOString().slice(0, 10),
+        deactivation_reason: '',
+        deactivation_notes: '',
+      });
       return;
     }
+
+    if (!window.confirm(
+      `Reativar "${item.social_name || item.full_name}"?\n\nO usuário volta a aparecer nas listas ativas e na lista de presença, e os dados do desligamento anterior são apagados.`
+    )) {
+      return;
+    }
+
     setError('');
     setSuccess('');
     try {
-      await studentService.update(item.id, { is_active: !isActive });
-      setSuccess(isActive ? 'Usuário desativado com sucesso.' : 'Usuário reativado com sucesso.');
+      await studentService.update(item.id, {
+        is_active: true,
+        deactivated_at: null,
+        deactivation_reason: null,
+        deactivation_notes: null,
+      });
+      setSuccess('Usuário reativado com sucesso.');
       await loadData();
     } catch (err) {
       setError(err?.response?.data?.message || 'Falha ao alterar o status do usuário.');
+    }
+  };
+
+  const confirmarDesligamento = async (event) => {
+    event.preventDefault();
+    if (!desligamento) return;
+
+    if (!desligamento.deactivation_reason) {
+      setError('Informe o motivo do desligamento.');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setSalvandoDesligamento(true);
+    try {
+      await studentService.update(desligamento.student.id, {
+        is_active: false,
+        deactivated_at: desligamento.deactivated_at || null,
+        deactivation_reason: desligamento.deactivation_reason,
+        deactivation_notes: desligamento.deactivation_notes.trim() || null,
+      });
+      setDesligamento(null);
+      setSuccess('Usuário desligado com sucesso. O cadastro e o histórico foram preservados.');
+      await loadData();
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Falha ao registrar o desligamento.');
+    } finally {
+      setSalvandoDesligamento(false);
     }
   };
 
@@ -305,7 +372,7 @@ function Students() {
               <div>
                 <h3 className="text-base font-bold text-slate-900">Detalhes do Usuário</h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  NIS: <MaskedValue value={selectedStudentForDetails.nis_user} /> | CPF/CNS: {selectedStudentForDetails.cpf_cns || '—'}
+                  NIS: <MaskedValue value={selectedStudentForDetails.nis_user} /> | CPF: {selectedStudentForDetails.cpf_cns || '—'}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -342,6 +409,35 @@ function Students() {
             </div>
 
             <div className="p-6 overflow-y-auto space-y-6">
+              {selectedStudentForDetails.is_active === false && (
+                <section className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <UserX className="h-3.5 w-3.5" />
+                    Desligamento
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs mt-3">
+                    <div>
+                      <span className="text-amber-700/70 font-bold uppercase text-[9px] block">Data</span>
+                      <strong className="text-amber-900 font-bold block mt-0.5">
+                        {formatDateBR(selectedStudentForDetails.deactivated_at)}
+                      </strong>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <span className="text-amber-700/70 font-bold uppercase text-[9px] block">Motivo</span>
+                      <strong className="text-amber-900 font-bold block mt-0.5">
+                        {selectedStudentForDetails.deactivation_reason || '—'}
+                      </strong>
+                    </div>
+                    <div className="sm:col-span-3">
+                      <span className="text-amber-700/70 font-bold uppercase text-[9px] block">Observação</span>
+                      <strong className="text-amber-900 font-semibold block mt-0.5 leading-relaxed whitespace-pre-line">
+                        {selectedStudentForDetails.deactivation_notes || '—'}
+                      </strong>
+                    </div>
+                  </div>
+                </section>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <section className="bg-slate-50/50 border border-slate-200/60 rounded-xl p-4 space-y-3">
                   <h4 className="text-xs font-bold text-indigo-600 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
@@ -353,6 +449,12 @@ function Students() {
                       <span className="text-slate-400 font-bold uppercase text-[9px] block">Nome</span>
                       <strong className="text-slate-800 font-extrabold text-sm block mt-0.5">{selectedStudentForDetails.full_name || '—'}</strong>
                     </div>
+                    {selectedStudentForDetails.social_name && (
+                      <div className="col-span-2">
+                        <span className="text-slate-400 font-bold uppercase text-[9px] block">Nome Social</span>
+                        <strong className="text-slate-800 font-extrabold text-sm block mt-0.5">{selectedStudentForDetails.social_name}</strong>
+                      </div>
+                    )}
                     <div>
                       <span className="text-slate-400 font-bold uppercase text-[9px] block">Nascimento</span>
                       <strong className="text-slate-800 font-bold block mt-0.5">{formatDateBR(selectedStudentForDetails.birth_date)}</strong>
@@ -692,6 +794,8 @@ function Students() {
                 <section className="bg-slate-50/50 border border-slate-200/60 rounded-xl p-4 space-y-2 md:col-span-2">
                   <span className="text-slate-400 font-bold uppercase text-[9px] block">Anotações dos Orientadores</span>
                   <strong className="text-slate-800 font-semibold text-xs block leading-relaxed whitespace-pre-line">{selectedStudentForDetails.advisor_notes || '—'}</strong>
+                  <span className="text-slate-400 font-bold uppercase text-[9px] block mt-3">Observação do Técnico</span>
+                  <strong className="text-slate-800 font-semibold text-xs block leading-relaxed whitespace-pre-line">{selectedStudentForDetails.technician_notes || '—'}</strong>
                 </section>
               </div>
             </div>
@@ -745,11 +849,11 @@ function Students() {
                 onChange={(e) => setFilterClassGroup(e.target.value)}
                 className="w-full h-10 px-3.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all cursor-pointer"
               >
-                <option value={TURMA_FILTER_ALL}>Todas as turmas</option>
-                <option value="__none__">Sem turma</option>
+                <option value={TURMA_FILTER_ALL}>Todos os grupos</option>
+                <option value="__none__">Sem grupo</option>
                 {classGroupsList.map((t) => (
                   <option key={t.id} value={t.slug}>
-                    {t.name}
+                    {turmaLabel(classGroupsList, t.slug)}
                   </option>
                 ))}
               </select>
@@ -770,10 +874,40 @@ function Students() {
               </select>
             </div>
 
+            <div className="w-full sm:w-auto min-w-[160px] space-y-1">
+              <select
+                id="filter-faixa"
+                value={filterFaixaEtaria}
+                onChange={(e) => setFilterFaixaEtaria(e.target.value)}
+                title="Faixa etária calculada pela data de nascimento."
+                className="w-full h-10 px-3.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all cursor-pointer"
+              >
+                <option value="all">Todas as idades</option>
+                {FAIXAS_ETARIAS.map((faixa) => (
+                  <option key={faixa.value} value={faixa.value}>{faixa.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="w-full sm:w-auto min-w-[160px] space-y-1">
+              <select
+                id="filter-aniversario"
+                value={filterMesAniversario}
+                onChange={(e) => setFilterMesAniversario(e.target.value)}
+                title="Mês de aniversário do usuário."
+                className="w-full h-10 px-3.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all cursor-pointer"
+              >
+                <option value="all">Todos os aniversários</option>
+                {MESES.map((mes, indice) => (
+                  <option key={mes} value={indice + 1}>Aniversário em {mes}</option>
+                ))}
+              </select>
+            </div>
+
             <button
               type="button"
               onClick={() => setOnlySiscMismatch((prev) => !prev)}
-              title="Mostra apenas usuários cuja turma no SOS difere do grupo informado no SISC."
+              title="Mostra apenas usuários cujo grupo no SOS difere do grupo informado no SISC."
               className={cn(
                 'h-10 px-3.5 inline-flex items-center gap-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer shrink-0',
                 onlySiscMismatch
@@ -831,11 +965,14 @@ function Students() {
                   onClick={() => showDetails(item)}
                   className="flex items-center gap-3.5 px-4 py-3 hover:bg-slate-50/60 transition-colors cursor-pointer group"
                 >
-                  <Avatar name={item.full_name} />
+                  <Avatar name={item.social_name || item.full_name} />
 
-                  {/* Identificação */}
+                  {/* Identificação: o nome social vem na frente; o civil fica logo abaixo. */}
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold text-slate-800 truncate">{item.full_name}</p>
+                    <p className="text-sm font-bold text-slate-800 truncate">{item.social_name || item.full_name}</p>
+                    {item.social_name && (
+                      <p className="text-[11px] text-slate-400 font-semibold truncate">{item.full_name}</p>
+                    )}
                     <p className="text-[11px] text-slate-400 font-semibold truncate">
                       NIS <MaskedValue value={item.nis_user || item.enrollment_code} />
                       <span className="mx-1 text-slate-300">·</span>
@@ -958,6 +1095,104 @@ function Students() {
           )}
         </CardContent>
       </Card>
+
+      {/* Ficha de desligamento */}
+      {desligamento && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <form
+            onSubmit={confirmarDesligamento}
+            className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden"
+          >
+            <div className="flex items-start justify-between gap-4 px-6 py-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Desligar usuário</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {desligamento.student.social_name || desligamento.student.full_name}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDesligamento(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="flex items-start gap-2.5 rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-2.5">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />
+                <p className="text-xs text-sky-900 leading-relaxed">
+                  O cadastro e todo o histórico de frequência são mantidos. O usuário sai das
+                  listas ativas e da lista de presença, e pode ser reativado a qualquer momento.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label htmlFor="deactivated_at" className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">
+                    Data do desligamento
+                  </label>
+                  <input
+                    id="deactivated_at"
+                    type="date"
+                    value={desligamento.deactivated_at}
+                    onChange={(e) => setDesligamento((d) => ({ ...d, deactivated_at: e.target.value }))}
+                    className="w-full h-10 px-3.5 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all cursor-pointer"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="deactivation_reason" className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">
+                    Motivo *
+                  </label>
+                  <select
+                    id="deactivation_reason"
+                    value={desligamento.deactivation_reason}
+                    onChange={(e) => setDesligamento((d) => ({ ...d, deactivation_reason: e.target.value }))}
+                    className="w-full h-10 px-3 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all cursor-pointer"
+                  >
+                    <option value="">Selecione…</option>
+                    {MOTIVOS_DESLIGAMENTO.map((motivo) => (
+                      <option key={motivo} value={motivo}>{motivo}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="deactivation_notes" className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5 block">
+                  Observação
+                </label>
+                <textarea
+                  id="deactivation_notes"
+                  rows={3}
+                  placeholder="Detalhes do desligamento, encaminhamentos feitos, contato com a família..."
+                  value={desligamento.deactivation_notes}
+                  onChange={(e) => setDesligamento((d) => ({ ...d, deactivation_notes: e.target.value }))}
+                  className="w-full px-3 py-2 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none transition-all resize-y min-h-[4.5rem]"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+              <button
+                type="button"
+                onClick={() => setDesligamento(null)}
+                className="h-10 px-4 rounded-lg text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={salvandoDesligamento}
+                className="h-10 px-6 rounded-lg text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 transition-colors disabled:opacity-50 shadow-sm cursor-pointer"
+              >
+                {salvandoDesligamento ? 'Registrando…' : 'Registrar desligamento'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

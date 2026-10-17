@@ -95,6 +95,7 @@ class StudentController {
 
       const allowedFields = [
         'full_name',
+        'social_name',
         'birth_date',
         'nis_user',
         'color',
@@ -139,6 +140,7 @@ class StudentController {
         'sisc_link_date',
         'sisc_group',
         'advisor_notes',
+        'technician_notes',
         'enrollment_code',
       ];
 
@@ -173,6 +175,7 @@ class StudentController {
       const updates = {};
       const allowedFields = [
         'full_name',
+        'social_name',
         'birth_date',
         'nis_user',
         'color',
@@ -217,8 +220,12 @@ class StudentController {
         'sisc_link_date',
         'sisc_group',
         'advisor_notes',
+        'technician_notes',
         'enrollment_code',
         'is_active',
+        'deactivated_at',
+        'deactivation_reason',
+        'deactivation_notes',
       ];
 
       allowedFields.forEach((field) => {

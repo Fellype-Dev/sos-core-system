@@ -3,7 +3,7 @@ import {
   PieChart, Pie, BarChart, Bar, ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LabelList
 } from 'recharts';
 import {
-  Users, Calendar, TrendingUp, Building, BarChart3, PieChart as PieIcon, Clock, Activity, LayoutGrid
+  Users, Calendar, TrendingUp, Building, BarChart3, PieChart as PieIcon, Clock, Activity, LayoutGrid, ClipboardList
 } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
 import studentService from '../services/studentService';
@@ -16,7 +16,7 @@ import TurmaDashboard from '../components/TurmaDashboard';
 import {
   PERIOD_PRESETS, getPresetRange, getPreviousRange, sessionInRange,
   aggregateMetrics, buildTrend, countNewStudents, bucketLabel,
-  buildTurmaDashboard,
+  buildTurmaDashboard, buildMovimentacao,
 } from '../lib/analytics';
 
 const COLORS = {
@@ -173,6 +173,12 @@ function Home() {
       value,
     }));
   }, [selectedUnits]);
+
+  // Entradas e desligamentos no período
+  const movimentacao = useMemo(
+    () => buildMovimentacao(selectedUnits, range),
+    [selectedUnits, range]
+  );
 
   // Comparativo entre unidades (frequência e cadastros no período)
   const unitComparison = useMemo(() => {
@@ -363,16 +369,86 @@ function Home() {
         </Card>
       )}
 
+      {/* Entradas e desligamentos */}
+      {movimentacao.porMes.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="lg:col-span-2 border-slate-100 shadow-lg shadow-slate-100/30 bg-white rounded-2xl overflow-hidden">
+            <CardHeader className="border-b border-slate-100/50 pb-4">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-indigo-600" />
+                <CardTitle className="text-base font-bold text-slate-900">Entradas e Desligamentos</CardTitle>
+              </div>
+              <CardDescription className="text-xs text-slate-400">
+                Inserções e desligamentos mês a mês no período selecionado
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-6">
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={movimentacao.porMes} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    cursor={{ fill: '#f8fafc' }}
+                    contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: 12 }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="inseridos" name="Inseridos" fill="#0d9488" barSize={16} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="desligados" name="Desligados" fill="#d97706" barSize={16} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card className="border-slate-100 shadow-lg shadow-slate-100/30 bg-white rounded-2xl overflow-hidden">
+            <CardHeader className="border-b border-slate-100/50 pb-4">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="h-5 w-5 text-indigo-600" />
+                <CardTitle className="text-base font-bold text-slate-900">Motivos de Desligamento</CardTitle>
+              </div>
+              <CardDescription className="text-xs text-slate-400">
+                {movimentacao.totalDesligados} desligamento{movimentacao.totalDesligados === 1 ? '' : 's'} no período
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-6">
+              {movimentacao.porMotivo.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <ClipboardList className="h-9 w-9 text-slate-200 mb-3" />
+                  <p className="text-xs font-bold text-slate-400">Nenhum desligamento no período</p>
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {movimentacao.porMotivo.map((motivo) => {
+                    const percentual = Math.round((motivo.value / movimentacao.totalDesligados) * 100);
+                    return (
+                      <li key={motivo.name}>
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="text-xs font-semibold text-slate-700 leading-snug">{motivo.name}</span>
+                          <span className="shrink-0 text-xs font-bold text-slate-900 tabular-nums">{motivo.value}</span>
+                        </div>
+                        <div className="mt-1 h-1.5 w-full rounded-full bg-slate-100">
+                          <div className="h-1.5 rounded-full bg-amber-500" style={{ width: `${percentual}%` }} />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Usuários por turma — todas as turmas, agrupadas por unidade */}
       {turmaData.totalTurmas > 0 && (
         <Card className="border-slate-100 shadow-lg shadow-slate-100/30 bg-white rounded-2xl overflow-hidden">
           <CardHeader className="border-b border-slate-100/50 pb-4">
             <div className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5 text-indigo-600" />
-              <CardTitle className="text-base font-bold text-slate-900">Usuários por Turma</CardTitle>
+              <CardTitle className="text-base font-bold text-slate-900">Usuários por Grupo</CardTitle>
             </div>
             <CardDescription className="text-xs text-slate-400">
-              Todas as {turmaData.totalTurmas} turmas, por unidade, da maior para a menor.
+              Todos os {turmaData.totalTurmas} grupos, por unidade, do maior para o menor.
               A largura da barra é comparável entre as unidades.
             </CardDescription>
           </CardHeader>

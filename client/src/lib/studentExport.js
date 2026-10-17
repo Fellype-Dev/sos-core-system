@@ -2,6 +2,7 @@
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import { drawReportHeader, drawReportFooter } from './pdfBranding';
+import { buildTurmaLabels } from './turmaLabels';
 import { getEnrollmentDate, getTenure } from '../pages/students/studentForm';
 
 const DASH = '—';
@@ -28,7 +29,8 @@ function list(value) {
 
 function turmaName(classGroups, slug) {
   if (!slug) return DASH;
-  return classGroups.find((group) => group.slug === slug)?.name || slug;
+  // Mesmo rótulo usado nas telas: grupos homônimos saem com período e dias.
+  return buildTurmaLabels(classGroups).get(slug) || slug;
 }
 
 function tenureLabel(student) {
@@ -48,13 +50,14 @@ export function buildStudentSections(student, classGroups = []) {
       title: 'Identificação',
       fields: [
         ['Nome completo', text(student.full_name)],
+        ['Nome social', text(student.social_name)],
         ['Data de nascimento', formatDate(student.birth_date)],
         ['NIS', text(student.nis_user)],
-        ['CPF/CNS', text(student.cpf_cns)],
+        ['CPF', text(student.cpf_cns)],
         ['Cor/Raça', text(student.color)],
         ['Código de matrícula', text(student.enrollment_code)],
         ['Unidade', text(student.programs?.name)],
-        ['Turma', turmaName(classGroups, student.class_group)],
+        ['Grupo', turmaName(classGroups, student.class_group)],
         ['Situação', student.is_active === false ? 'Inativo' : 'Ativo'],
         ['Tempo no programa', tenureLabel(student)],
       ],
@@ -104,6 +107,7 @@ export function buildStudentSections(student, classGroups = []) {
         ['Motivo do vínculo', text(student.cras_link_reason)],
         ['Órgão encaminhador', text(student.cras_referral_agency)],
         ['Técnico do CRAS', text(student.cras_technician)],
+        ['Observação do técnico', text(student.technician_notes)],
         ['Inserção no SCFV', formatDate(student.scfv_insertion_date)],
         ['Atualização', formatDate(student.scfv_update_date)],
         ['Dias de frequência', list(student.scfv_frequency_days)],
@@ -166,6 +170,7 @@ const EXTRA_COLUMNS = [
   ['Composição familiar', membersText],
   ['Pessoas autorizadas a retirar', pickupsText],
   ['Observações do orientador', (s) => text(s.advisor_notes)],
+  ['Observação do técnico', (s) => text(s.technician_notes)],
 ];
 
 /** Planilha com uma linha por assistido; serve para 1 ou N registros. */

@@ -164,9 +164,9 @@ export const CORES_UNIDADE = ['#4f46e5', '#0d9488', '#d97706'];
  * unidade porque um mesmo nome ("Esperança") existe em mais de uma; agrupá-las
  * pelo código do sistema somaria turmas diferentes.
  *
- * Quem está sem turma sai do ranking: não é uma turma e, por costumar ser o
- * maior grupo, achatava a comparação. Volta como número à parte, que é onde ele
- * age — indica vínculos a fazer.
+ * Quem está sem grupo sai do ranking: não é um grupo e, por costumar ser o
+ * maior conjunto, achatava a comparação. Volta como número à parte, que é onde
+ * ele age — indica vínculos a fazer.
  *
  * @param {Array} units linhas { program, students, classGroups }
  */
@@ -223,6 +223,70 @@ export function buildTurmaDashboard(units) {
     totalTurmas: unidades.reduce((soma, u) => soma + u.turmas.length, 0),
     totalSemTurma: unidades.reduce((soma, u) => soma + u.semTurma, 0),
   };
+}
+
+const MESES_CURTO = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+/**
+ * Entradas e desligamentos mês a mês, para o gráfico de movimentação.
+ *
+ * A entrada é contada pela data de inserção no SCFV; sem ela, pela data do
+ * cadastro no sistema. A saída usa a data registrada no desligamento — quem
+ * está inativo sem data não entra na contagem, porque foi desativado antes de
+ * a ficha de desligamento existir.
+ */
+export function buildMovimentacao(units, range) {
+  const dentro = (iso) => {
+    if (!iso) return false;
+    const dia = String(iso).slice(0, 10);
+    if (range?.start && dia < range.start) return false;
+    if (range?.end && dia > range.end) return false;
+    return true;
+  };
+
+  const meses = new Map();
+  const registrar = (iso, campo) => {
+    const chave = String(iso || '').slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(chave)) return;
+    const atual = meses.get(chave) || { inseridos: 0, desligados: 0 };
+    atual[campo] += 1;
+    meses.set(chave, atual);
+  };
+
+  const motivos = new Map();
+  let totalDesligados = 0;
+
+  units.forEach((row) => {
+    (row.students || []).forEach((student) => {
+      const entrada = String(student.scfv_insertion_date || student.created_at || '').slice(0, 10);
+      if (dentro(entrada)) registrar(entrada, 'inseridos');
+
+      if (dentro(student.deactivated_at)) {
+        registrar(student.deactivated_at, 'desligados');
+        totalDesligados += 1;
+        const motivo = String(student.deactivation_reason || '').trim() || 'Não informado';
+        motivos.set(motivo, (motivos.get(motivo) || 0) + 1);
+      }
+    });
+  });
+
+  const porMes = [...meses.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([chave, valores]) => {
+      const [ano, mes] = chave.split('-');
+      return {
+        name: `${MESES_CURTO[Number(mes) - 1]}/${ano.slice(2)}`,
+        inseridos: valores.inseridos,
+        desligados: valores.desligados,
+        saldo: valores.inseridos - valores.desligados,
+      };
+    });
+
+  const porMotivo = [...motivos.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, value]) => ({ name, value }));
+
+  return { porMes, porMotivo, totalDesligados };
 }
 
 // Novos cadastros dentro do intervalo (usa created_at dos estudantes).
