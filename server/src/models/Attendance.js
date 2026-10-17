@@ -4,7 +4,7 @@ class Attendance {
   static async findSessionById(sessionId) {
     const { data, error } = await supabase
       .from('attendance_sessions')
-      .select('id, program_id, attendance_date, class_group, period, created_by, created_at, creator:users!created_by(full_name)')
+      .select('id, program_id, attendance_date, class_group, period, list_type, created_by, created_at, creator:users!created_by(full_name)')
       .eq('id', sessionId)
       .maybeSingle();
 
@@ -15,14 +15,15 @@ class Attendance {
     return data || null;
   }
 
-  static async findSession({ programId, attendanceDate, classGroup, period }) {
+  static async findSession({ programId, attendanceDate, classGroup, period, listType = 'sos' }) {
     const { data, error } = await supabase
       .from('attendance_sessions')
-      .select('id, program_id, attendance_date, class_group, period, created_by, created_at, creator:users!created_by(full_name)')
+      .select('id, program_id, attendance_date, class_group, period, list_type, created_by, created_at, creator:users!created_by(full_name)')
       .eq('program_id', programId)
       .eq('attendance_date', attendanceDate)
       .eq('class_group', classGroup || '')
       .eq('period', period || '')
+      .eq('list_type', listType)
       .maybeSingle();
 
     if (error) {
@@ -32,7 +33,7 @@ class Attendance {
     return data || null;
   }
 
-  static async createSession({ programId, attendanceDate, classGroup, period, createdBy }) {
+  static async createSession({ programId, attendanceDate, classGroup, period, createdBy, listType = 'sos' }) {
     const { data, error } = await supabase
       .from('attendance_sessions')
       .insert({
@@ -40,9 +41,10 @@ class Attendance {
         attendance_date: attendanceDate,
         class_group: classGroup || '',
         period: period || '',
+        list_type: listType,
         created_by: createdBy,
       })
-      .select('id, program_id, attendance_date, class_group, period, created_by, created_at')
+      .select('id, program_id, attendance_date, class_group, period, list_type, created_by, created_at')
       .single();
 
     if (error) {
@@ -52,13 +54,13 @@ class Attendance {
     return data;
   }
 
-  static async getOrCreateSession({ programId, attendanceDate, classGroup, period, createdBy }) {
-    const existing = await this.findSession({ programId, attendanceDate, classGroup, period });
+  static async getOrCreateSession({ programId, attendanceDate, classGroup, period, createdBy, listType = 'sos' }) {
+    const existing = await this.findSession({ programId, attendanceDate, classGroup, period, listType });
     if (existing) {
       return existing;
     }
 
-    return this.createSession({ programId, attendanceDate, classGroup, period, createdBy });
+    return this.createSession({ programId, attendanceDate, classGroup, period, createdBy, listType });
   }
 
   static async replaceRecords({ sessionId, records }) {
@@ -138,10 +140,10 @@ class Attendance {
     return { session, records: mergedRecords };
   }
 
-  static async listSessions({ programId, attendanceDate, classGroup, period } = {}) {
+  static async listSessions({ programId, attendanceDate, classGroup, period, listType } = {}) {
     let query = supabase
       .from('attendance_sessions')
-      .select('id, program_id, attendance_date, class_group, period, created_by, created_at, creator:users!created_by(full_name)')
+      .select('id, program_id, attendance_date, class_group, period, list_type, created_by, created_at, creator:users!created_by(full_name)')
       .order('attendance_date', { ascending: false })
       .order('created_at', { ascending: false });
 
@@ -161,6 +163,11 @@ class Attendance {
 
     if (period !== undefined) {
       query = query.eq('period', period || '');
+    }
+
+    // Sem o tipo informado, o histórico traz as duas listas.
+    if (listType) {
+      query = query.eq('list_type', listType);
     }
 
     const { data, error } = await query;
@@ -209,10 +216,10 @@ class Attendance {
     });
   }
 
-  static async getBulkSessionDetails({ programId, attendanceDate, startDate, endDate, classGroup, period }) {
+  static async getBulkSessionDetails({ programId, attendanceDate, startDate, endDate, classGroup, period, listType }) {
     let query = supabase
       .from('attendance_sessions')
-      .select('id, program_id, attendance_date, class_group, period, created_by, created_at, creator:users!created_by(full_name)');
+      .select('id, program_id, attendance_date, class_group, period, list_type, created_by, created_at, creator:users!created_by(full_name)');
 
     if (programId) {
       query = query.eq('program_id', programId);
@@ -238,6 +245,10 @@ class Attendance {
 
     if (period !== undefined && period !== null && period !== '') {
       query = query.eq('period', period);
+    }
+
+    if (listType) {
+      query = query.eq('list_type', listType);
     }
 
     const { data: sessions, error: sessionsError } = await query;

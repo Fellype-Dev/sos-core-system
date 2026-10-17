@@ -12,11 +12,15 @@ create table if not exists programs (
 create table if not exists users (
     id uuid primary key default gen_random_uuid(),
     full_name text not null,
+    social_name text,
     email text unique not null,
     password_hash text not null,
     -- coordenador, tecnico e assistente compartilham o mesmo nivel de acesso (escopo de unidade)
     role text not null check (role in ('admin', 'sede', 'coordenador', 'tecnico', 'assistente')),
     is_active boolean not null default true,
+    deactivated_at date,
+    deactivation_reason text,
+    deactivation_notes text,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
 );
@@ -90,6 +94,7 @@ create table if not exists students (
     sisc_link_date date,
     sisc_group text,
     advisor_notes text,
+    technician_notes text,
     enrollment_code text unique,
     contact_phone text,
     allergies text,

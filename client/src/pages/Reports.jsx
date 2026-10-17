@@ -10,6 +10,7 @@ import useAuth from '../hooks/useAuth';
 import attendanceService from '../services/attendanceService';
 import classGroupService from '../services/classGroupService';
 import studentService from '../services/studentService';
+import { buildTurmaLabels } from '../lib/turmaLabels';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -37,18 +38,35 @@ const PALETTE = ['#3e4095', '#72b736', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6
 
 const REPORT_TYPES = {
   class_groups: {
-    label: 'Turmas da unidade',
-    description: 'Exporta a lista de turmas cadastradas na unidade selecionada.',
+    label: 'Grupos da unidade',
+    description: 'Exporta a lista de grupos cadastrados na unidade selecionada.',
   },
   attendance_history: {
     label: 'Histórico de listas de presença',
-    description: 'Exporta um resumo das listas de presença filtrando por data, turma e período.',
+    description: 'Exporta um resumo das listas de presença filtrando por data, grupo e período.',
   },
   attendance_detail: {
     label: 'Lista de presença detalhada do dia',
     description: 'Exporta a lista de usuarios presentes e faltosos de uma lista de presença específica.',
   },
+  movimentacao: {
+    label: 'Inseridos e desligados por mês',
+    description: 'Resumo mensal de entradas e desligamentos, com o detalhe de cada usuário e o total por grupo.',
+  },
 };
+
+const MESES_CURTO = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+/** Chave AAAA-MM de uma data ISO; null quando a data não existe. */
+function chaveMes(iso) {
+  const texto = String(iso || '').slice(0, 7);
+  return /^\d{4}-\d{2}$/.test(texto) ? texto : null;
+}
+
+function rotuloMes(chave) {
+  const [ano, mes] = chave.split('-');
+  return `${MESES_CURTO[Number(mes) - 1]}/${ano}`;
+}
 
 function isUuid(value) {
   return (
@@ -331,17 +349,18 @@ function Reports() {
     return `${prefix}_${selectedProgramId.slice(0, 8)}_${timestamp}.xlsx`;
   };
 
+  const turmaLabels = useMemo(() => buildTurmaLabels(classGroups), [classGroups]);
+
   const classGroupLabel = (slug) => {
     if (!slug) return 'Todas';
-    if (slug === '__none__') return 'Sem turma';
-    const found = classGroups.find((g) => g.slug === slug);
-    return found ? found.name : slug;
+    if (slug === '__none__') return 'Sem grupo';
+    return turmaLabels.get(slug) || slug;
   };
 
   // 1. Exporta Turmas
   const exportClassGroups = async () => {
     setLoading(true);
-    setLoadingStep('Buscando turmas no banco...');
+    setLoadingStep('Buscando grupos no banco...');
     setError('');
     setSuccess('');
     try {
@@ -349,12 +368,12 @@ function Reports() {
       const list = response.data || [];
 
       if (list.length === 0) {
-        setSuccess('Nenhuma turma cadastrada para exportação.');
+        setSuccess('Nenhum grupo cadastrado para exportação.');
         return;
       }
 
       setLoadingStep('Montando planilhas...');
-      const rows = [['Identificador', 'Nome da Turma', 'Período', 'Código Slug', 'Criado em']];
+      const rows = [['Identificador', 'Nome do Grupo', 'Período', 'Código Slug', 'Criado em']];
       list.forEach((t) => {
         rows.push([
           t.id,
@@ -365,10 +384,10 @@ function Reports() {
         ]);
       });
 
-      downloadWorkbook(buildFileName('turmas_unidade'), [{ name: 'Turmas', rows }]);
-      setSuccess('Relatório de turmas exportado com sucesso.');
+      downloadWorkbook(buildFileName('grupos_unidade'), [{ name: 'Grupos', rows }]);
+      setSuccess('Relatório de grupos exportado com sucesso.');
     } catch (err) {
-      setError(err?.response?.data?.message || 'Falha ao exportar turmas da unidade.');
+      setError(err?.response?.data?.message || 'Falha ao exportar grupos da unidade.');
     } finally {
       setLoading(false);
       setLoadingStep('');
@@ -409,7 +428,7 @@ function Reports() {
       }
 
       setLoadingStep('Formatando dados...');
-      const rows = [['Identificador', 'Data', 'Turma', 'Período', 'Presenças', 'Faltas', 'Total', 'Criado em', 'Lançado por']];
+      const rows = [['Identificador', 'Data', 'Grupo', 'Período', 'Presenças', 'Faltas', 'Total', 'Criado em', 'Lançado por']];
       list.forEach((s) => {
         const pres = s.present_count || 0;
         const abs = s.absent_count || 0;
@@ -471,8 +490,8 @@ function Reports() {
       }
 
       setLoadingStep('Processando dados e montando tabelas...');
-      const detailRows = [['Data', 'Turma', 'Período', 'Usuario', 'NIS/Matrícula', 'Status', 'Justificativa']];
-      const summaryRows = [['Data', 'Turma', 'Período', 'Presenças', 'Faltas', 'Criado em', 'Criado por']];
+      const detailRows = [['Data', 'Grupo', 'Período', 'Usuario', 'NIS/Matrícula', 'Status', 'Justificativa']];
+      const summaryRows = [['Data', 'Grupo', 'Período', 'Presenças', 'Faltas', 'Criado em', 'Criado por']];
 
       details.forEach((detail) => {
         const sessionRecords = detail.records || [];
@@ -515,6 +534,137 @@ function Reports() {
     }
   };
 
+  /**
+   * 4. Movimentação: inseridos e desligados por mês.
+   *
+   * A entrada é contada pela data de inserção no SCFV; quando ela não existe,
+   * cai para a data do cadastro no sistema. A saída usa a data do desligamento.
+   * O intervalo de datas do filtro recorta os dois lados.
+   */
+  const exportMovimentacao = async () => {
+    setLoading(true);
+    setLoadingStep('Buscando cadastros da unidade...');
+    setError('');
+    setSuccess('');
+    try {
+      const response = await studentService.getAll({ program_id: selectedProgramId });
+      const alunos = response.data || [];
+
+      // Sem intervalo marcado, considera todo o histórico.
+      const inicio = useDateRange ? startDateFilter : '';
+      const fim = useDateRange ? endDateFilter : '';
+      const dentroDoPeriodo = (iso) => {
+        if (!iso) return false;
+        const dia = String(iso).slice(0, 10);
+        if (inicio && dia < inicio) return false;
+        if (fim && dia > fim) return false;
+        return true;
+      };
+
+      const dataEntrada = (a) =>
+        String(a.scfv_insertion_date || a.created_at || '').slice(0, 10) || null;
+
+      const inseridos = alunos.filter((a) => dentroDoPeriodo(dataEntrada(a)));
+      const desligados = alunos.filter((a) => dentroDoPeriodo(a.deactivated_at));
+
+      if (inseridos.length === 0 && desligados.length === 0) {
+        setSuccess('Nenhuma inserção ou desligamento no período selecionado.');
+        return;
+      }
+
+      setLoadingStep('Montando planilhas...');
+
+      // Aba 1 — resumo por mês
+      const meses = new Map();
+      const registrar = (chave, campo) => {
+        if (!chave) return;
+        const atual = meses.get(chave) || { inseridos: 0, desligados: 0 };
+        atual[campo] += 1;
+        meses.set(chave, atual);
+      };
+      inseridos.forEach((a) => registrar(chaveMes(dataEntrada(a)), 'inseridos'));
+      desligados.forEach((a) => registrar(chaveMes(a.deactivated_at), 'desligados'));
+
+      const resumo = [['Mês', 'Inseridos', 'Desligados', 'Saldo']];
+      [...meses.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .forEach(([chave, valores]) => {
+          resumo.push([
+            rotuloMes(chave),
+            valores.inseridos,
+            valores.desligados,
+            valores.inseridos - valores.desligados,
+          ]);
+        });
+
+      // Aba 2 — inseridos, um por linha
+      const linhasInseridos = [['Mês', 'Data de entrada', 'Nome', 'Nome social', 'NIS', 'Grupo', 'Situação atual']];
+      inseridos
+        .sort((a, b) => String(dataEntrada(a)).localeCompare(String(dataEntrada(b))))
+        .forEach((a) => {
+          const entrada = dataEntrada(a);
+          linhasInseridos.push([
+            chaveMes(entrada) ? rotuloMes(chaveMes(entrada)) : '—',
+            formatDateBR(entrada),
+            a.full_name || '—',
+            a.social_name || '—',
+            a.nis_user || '—',
+            classGroupLabel(a.class_group),
+            a.is_active === false ? 'Desligado' : 'Ativo',
+          ]);
+        });
+
+      // Aba 3 — desligados, um por linha
+      const linhasDesligados = [['Mês', 'Data do desligamento', 'Nome', 'Nome social', 'NIS', 'Grupo', 'Motivo', 'Observação']];
+      desligados
+        .sort((a, b) => String(a.deactivated_at).localeCompare(String(b.deactivated_at)))
+        .forEach((a) => {
+          linhasDesligados.push([
+            chaveMes(a.deactivated_at) ? rotuloMes(chaveMes(a.deactivated_at)) : '—',
+            formatDateBR(a.deactivated_at),
+            a.full_name || '—',
+            a.social_name || '—',
+            a.nis_user || '—',
+            classGroupLabel(a.class_group),
+            a.deactivation_reason || '—',
+            a.deactivation_notes || '—',
+          ]);
+        });
+
+      // Aba 4 — total por grupo
+      const porGrupo = new Map();
+      const contarGrupo = (a, campo) => {
+        const rotulo = classGroupLabel(a.class_group);
+        const atual = porGrupo.get(rotulo) || { inseridos: 0, desligados: 0, ativos: 0 };
+        atual[campo] += 1;
+        porGrupo.set(rotulo, atual);
+      };
+      inseridos.forEach((a) => contarGrupo(a, 'inseridos'));
+      desligados.forEach((a) => contarGrupo(a, 'desligados'));
+      alunos.filter((a) => a.is_active !== false).forEach((a) => contarGrupo(a, 'ativos'));
+
+      const linhasGrupo = [['Grupo', 'Inseridos no período', 'Desligados no período', 'Ativos hoje']];
+      [...porGrupo.entries()]
+        .sort((a, b) => b[1].ativos - a[1].ativos)
+        .forEach(([rotulo, valores]) => {
+          linhasGrupo.push([rotulo, valores.inseridos, valores.desligados, valores.ativos]);
+        });
+
+      downloadWorkbook(buildFileName('movimentacao'), [
+        { name: 'Resumo por mês', rows: resumo },
+        { name: 'Inseridos', rows: linhasInseridos },
+        { name: 'Desligados', rows: linhasDesligados },
+        { name: 'Por grupo', rows: linhasGrupo },
+      ]);
+      setSuccess('Relatório de movimentação exportado com sucesso.');
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Falha ao exportar o relatório de movimentação.');
+    } finally {
+      setLoading(false);
+      setLoadingStep('');
+    }
+  };
+
   const handleExport = async () => {
     if (!selectedProgramId) {
       setError('Selecione uma unidade ativa antes de exportar relatórios.');
@@ -533,6 +683,11 @@ function Reports() {
 
     if (reportType === 'attendance_detail') {
       await exportAttendanceDetail();
+      return;
+    }
+
+    if (reportType === 'movimentacao') {
+      await exportMovimentacao();
     }
   };
 
@@ -734,7 +889,7 @@ function Reports() {
           </div>
           <div>
             <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Relatórios e Exportações</h1>
-            <p className="text-slate-500 text-sm mt-0.5">Gere planilhas eletrônicas detalhadas e relatórios consolidados em PDF das turmas e frequências.</p>
+            <p className="text-slate-500 text-sm mt-0.5">Gere planilhas eletrônicas detalhadas e relatórios consolidados em PDF dos grupos e frequências.</p>
           </div>
         </div>
       </div>
@@ -854,19 +1009,18 @@ function Reports() {
 
                 {/* Select Class Group */}
                 <div className="space-y-1.5 border-t border-slate-100 pt-3">
-                  <label htmlFor="reportClassGroup" className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5">Turma</label>
+                  <label htmlFor="reportClassGroup" className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5">Grupo</label>
                   <select
                     id="reportClassGroup"
                     className="h-10 px-3 w-full rounded-lg border border-slate-200 text-xs font-bold text-slate-700 bg-slate-50 focus:border-indigo-500 focus:ring-indigo-500/20 focus:outline-none transition-all cursor-pointer"
                     value={classGroupFilter}
                     onChange={(event) => setClassGroupFilter(event.target.value)}
                   >
-                    <option value="">Todas as turmas</option>
-                    <option value="__none__">Sem turma</option>
+                    <option value="">Todos os grupos</option>
+                    <option value="__none__">Sem grupo</option>
                     {classGroups.map((group) => (
                       <option key={group.id} value={group.slug}>
-                        {group.name}
-                        {group.period ? ` · ${group.period === 'manha' ? 'Manhã' : 'Tarde'}` : ''}
+                        {classGroupLabel(group.slug)}
                       </option>
                     ))}
                   </select>
@@ -904,8 +1058,10 @@ function Reports() {
                 <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5 ml-2.5 sm:ml-auto">
                   <Info className="h-3.5 w-3.5 text-indigo-400" />
                   {reportType === 'class_groups'
-                    ? 'Este relatório exporta a listagem completa das turmas.'
-                    : 'A exportação Excel é restrita à unidade ativa selecionada no cabeçalho.'}
+                    ? 'Este relatório exporta a listagem completa dos grupos.'
+                    : reportType === 'movimentacao'
+                      ? 'Sem intervalo de datas marcado, o relatório considera todo o histórico da unidade.'
+                      : 'A exportação Excel é restrita à unidade ativa selecionada no cabeçalho.'}
                 </span>
               </div>
 
@@ -939,7 +1095,7 @@ function Reports() {
                   </span>
                 </li>
                 <li className="py-2.5 flex justify-between gap-4">
-                  <span className="text-slate-400 uppercase text-[9px] tracking-wider mt-0.5">Turma</span>
+                  <span className="text-slate-400 uppercase text-[9px] tracking-wider mt-0.5">Grupo</span>
                   <span className="text-slate-800 text-right">{classGroupLabel(classGroupFilter)}</span>
                 </li>
                 <li className="py-2.5 flex justify-between gap-4">
@@ -1129,7 +1285,7 @@ function Reports() {
                       <div className="border border-slate-100 rounded-xl p-4 bg-white shadow-sm">
                         <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-1.5">
                           <BarChart3 className="h-4 w-4 text-indigo-500" />
-                          Usuários por Turma
+                          Usuários por Grupo
                         </h4>
                         <TurmaDashboard dados={turmaData} compacto />
                       </div>

@@ -8,6 +8,11 @@ class AttendanceController {
     return resolveScopedProgramId(req);
   }
 
+  /** Tipo da lista: a do SOS (padrão) ou a do SISC. */
+  resolveListType(valor) {
+    return valor === 'sisc' ? 'sisc' : 'sos';
+  }
+
   validateProgramAccess(req, targetProgramId) {
     if (!targetProgramId) {
       return { ok: false, message: 'Selecione uma unidade para continuar' };
@@ -28,7 +33,7 @@ class AttendanceController {
 
   async show(req, res, next) {
     try {
-      const { attendance_date, class_group = '', period = '' } = req.query;
+      const { attendance_date, class_group = '', period = '', list_type } = req.query;
       if (!attendance_date) {
         return ApiResponse.error(res, 'Parametro obrigatorio: attendance_date', 400);
       }
@@ -48,6 +53,7 @@ class AttendanceController {
         attendanceDate: attendance_date,
         classGroup: class_group,
         period,
+        listType: this.resolveListType(list_type),
       });
 
       if (!session) {
@@ -70,7 +76,7 @@ class AttendanceController {
 
   async store(req, res, next) {
     try {
-      const { attendance_date, class_group = '', period = '', records = [] } = req.body;
+      const { attendance_date, class_group = '', period = '', records = [], list_type } = req.body;
 
       if (!attendance_date) {
         return ApiResponse.error(res, 'Campo obrigatorio: attendance_date', 400);
@@ -102,12 +108,15 @@ class AttendanceController {
         return ApiResponse.error(res, 'Identificador de unidade invalido', 400);
       }
 
+      const listType = this.resolveListType(list_type);
+
       const session = await Attendance.getOrCreateSession({
         programId,
         attendanceDate: attendance_date,
         classGroup: class_group,
         period,
         createdBy: req.userId,
+        listType,
       });
 
       const savedRecords = await Attendance.replaceRecords({
@@ -122,6 +131,7 @@ class AttendanceController {
           attendance_date,
           class_group,
           period,
+          list_type: listType,
           records_count: records.length,
         },
       });
@@ -141,7 +151,7 @@ class AttendanceController {
 
   async listSessions(req, res, next) {
     try {
-      const { attendance_date, class_group, period } = req.query;
+      const { attendance_date, class_group, period, list_type } = req.query;
 
       const programId = this.resolveProgramId(req);
       const access = this.validateProgramAccess(req, programId);
@@ -158,6 +168,7 @@ class AttendanceController {
         attendanceDate: attendance_date,
         classGroup: class_group,
         period,
+        listType: list_type ? this.resolveListType(list_type) : undefined,
       });
 
       return ApiResponse.success(res, { data: sessions }, 'Listas de presenca listadas com sucesso');
@@ -191,7 +202,7 @@ class AttendanceController {
 
   async bulkSessionDetail(req, res, next) {
     try {
-      const { attendance_date, start_date, end_date, class_group, period } = req.query;
+      const { attendance_date, start_date, end_date, class_group, period, list_type } = req.query;
 
       const programId = this.resolveProgramId(req);
       const access = this.validateProgramAccess(req, programId);
@@ -210,6 +221,7 @@ class AttendanceController {
         endDate: end_date,
         classGroup: class_group,
         period,
+        listType: list_type ? this.resolveListType(list_type) : undefined,
       });
 
       await AuditLog.log({
